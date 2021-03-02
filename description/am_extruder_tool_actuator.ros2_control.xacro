@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    
+    <xacro:macro name="am_extruder_tool_actuator" params="name">
+        <ros2_control name="${name}" type="actuator">
+            <hardware>
+                <plugin>am_extruder_tool/AMExtruderHardware</plugin>
+                <param name="com_port_name">COM4</param> <!-- https://www.teuniz.net/RS-232/ -->
+                <param name="com_port_baud_rate">9600</param>
+                
+                <param name="stepper_motor_steps_per_revolution">400</param>
+                <param name="micro_stepping">16</param>
+                <param name="gear_ratio">3.0</param>
+                <param name="hobb_gear_diameter_mm">7.3</param>
+                <param name="filament_diameter_mm">2.85</param>
+            </hardware>
+            <joint name="filament_mover">
+                <command_interface name="velocity">
+                    <param name="min">-100000</param>
+                    <param name="max">100000</param>
+                </command_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="filament_heater">
+                <command_interface name="position">
+                    <param name="min">0</param>
+                    <param name="max">250</param>
+                </command_interface>
+                <state_interface name="position"/>
+            </joint>
+        </ros2_control>
+    </xacro:macro>
+    
+</robot>
