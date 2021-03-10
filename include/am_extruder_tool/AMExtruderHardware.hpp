@@ -36,6 +36,11 @@ private:
     void parseData(char* local_buffer, int len);
     void processBytes();
 
+    void readSerial();
+    std::thread* reader_thread_ptr;
+    std::atomic<bool> is_running;
+
+
     std::string hw_com_port_name_;
     int         hw_com_port_number_;
     int         hw_baud_rate_;
@@ -46,14 +51,14 @@ private:
     double hw_hobb_gear_diameter_mm_;
     double hw_filament_diameter_mm_;
 
-    double hw_filament_mover_state_;
-    double hw_filament_mover_command_;
-    
-    double hw_filament_heater_state_;
-    double hw_filament_heater_command_;
+    std::atomic<float> mover_val_;
+    std::atomic<float> heater_val_;
 
-    bool fil_mover_state_rcvd_;
-    bool fil_heater_state_rcvd_;
+    float hw_filament_mover_state_;
+    float hw_filament_mover_command_;
+    
+    float hw_filament_heater_state_;
+    float hw_filament_heater_command_;
 };
 
 } // namespace am_extruder_tool

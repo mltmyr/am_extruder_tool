@@ -1,5 +1,7 @@
 #include "AMExtruderHardware.h"
 
+#include <thread>
+
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -7,6 +9,130 @@
 
 namespace am_extruder_tool
 {
+
+
+
+float AMExtruderhardware::calcExtruderSetValue(double filament_mover_val)
+{
+    // Use parameter values to calculate extruderSetValue
+    hw_stepper_motor_steps_per_revolution_;
+    int    hw_micro_stepping_;
+    double hw_gear_ratio_;
+    double hw_hobb_gear_diameter_mm_;
+    double hw_filament_diameter_mm_;
+
+    return 0.0;
+}
+
+double AMExtruderhardware::calcExtruderSpeed(float filament_speed_val)
+{
+
+    return 0.0;
+}
+
+#define MSG_EXTRUSION_SPEED_DATA 'E'
+#define MSG_HEATING_DATA         'T'
+
+void AMExtruderhardware::parseData(char* local_buffer, int len)
+{
+    if (len <= 0)
+    {
+        return;
+    }
+
+    char cmd_byte = local_buffer[0];
+
+    if ( len == 5 && cmd_byte == MSG_EXTRUSION_SPEED_DATA )
+    {
+        float* data = (float*)(&(local_buffer[1]));
+        this->mover_val_ = *data;
+    }
+    else if ( len == 5 && cmd_byte == MSG_HEATING_DATA )
+    {
+        float* data = (float*)(&(local_buffer[1]));
+        this->heater_val_ = *data;
+    }
+
+    return;
+}
+
+#define LBUF_SIZE 5
+
+void AMExtruderHardware::processByte()
+{
+    static int numBytesTot  = 1;
+    static int numBytesRcvd = 0;
+    static char local_buffer[LBUF_SIZE] = {0};
+
+    if (numBytesRcvd < 1)
+    {
+        RS232_PollComport(this->hw_com_port_number_, &(local_buffer[0]), 1);
+        switch (local_buffer[0])
+        {
+        case MSG_EXTRUSION_SPEED_DATA:
+            numBytesTot  = 5;
+            numBytesRcvd = 1;
+            break;
+
+        case MSG_HEATING_DATA:
+            numBytesTot  = 5;
+            numBytesRcvd = 1;
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    /* Read numBytesTot-1 extra bytes */
+    else if (numBytesRcvd < numBytesTot)
+    {
+        int num_read = RS232_PollComport(this->hw_com_port_number_, &(local_buffer[numBytesRcvd]), numBytesTot-numBytesRcvd);
+        numBytesRcvd += num_read;
+    }
+
+    /* Execute command when all bytes have been read */
+    if (numBytesRcvd >= numBytesTot)
+    {
+        this->parseData(local_buffer, numBytesRcvd);
+        numBytesTot  = 1;
+        numBytesRcvd = 0;
+    }
+
+    return;
+}
+
+void AMExtruderhardware::readSerial()
+{
+    while (true)
+    {
+        if (this->is_running)
+        {
+            this->processByte();
+        }
+        else
+        {
+            std::this_thread::yield();
+        }
+    }
+    return;
+}
+
+double calc_stepper_motor_steps_per_mm_filament(double mot_steps_per_rev, int micro_stepping, double gear_ratio, hobb_diam_mm)
+{
+    return mot_steps_per_rev*(double)micro_stepping*gear_ratio/hobb_diam_mm;
+}
+
+AMExtruderhardware::AMExtruderhardware()
+    : is_running(false), reader_thread_ptr(nullptr)
+{
+
+}
+
+AMExtruderhardware::~AMExtruderhardware()
+{
+    delete reader_thread_ptr;
+}
 
 return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo & info)
 {
@@ -67,6 +193,10 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
 
     this->hw_filament_heater_state_   = std::numeric_limits<double>::quiet_NaN();
     this->hw_filament_heater_command_ = std::numeric_limits<double>::quiet_NaN();
+
+    this->hw_steps_per_mm_filament = calc_stepper_motor_steps_per_mm_filament(
+        this->hw_stepper_motor_steps_per_revolution_, this->hw_micro_stepping_,
+        this->hw_gear_ratio_, this->hw_hobb_gear_diameter_mm_);
 
     bool found_filament_mover_joint  = false;
     bool found_filament_heater_joint = false;
@@ -178,6 +308,9 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
         return return_type::ERROR;
     }
 
+    this->reader_thread_ptr = new std::thread(AMExtruderhardware::readSerial, this);
+    this->reader_thread_ptr->detach();
+
     status_ = hardware_interface::status::CONFIGURED;
     return return_type::OK;
 }
@@ -254,6 +387,8 @@ return_type AMExtruderHardware::start()
         return return_type::ERROR;
     }
 
+    this->is_running = true;
+
     // 2. Enable Extruder
 
     this->status_ = hardware_interface::status::STARTED;
@@ -269,137 +404,23 @@ return_type AMExtruderHardware::stop()
     RS232_flushRXTX(this->hw_com_port_number_);
     RS232_CloseComport(this->hw_com_port_number_);
 
+    this->is_running = false;
+
     this->status_ = hardware_interface::status::STOPPED;
 
     return return_type::OK;
 }
 
-
-#define MSG_EXTRUSION_SPEED_DATA 'E'
-#define MSG_HEATING_DATA         'T'
-
-void AMExtruderhardware::parseData(char* local_buffer, int len)
-{
-    if (len <= 0)
-    {
-        return;
-    }
-
-    char cmd_byte = local_buffer[0];
-
-    if ( len == 5 && cmd_byte == MSG_EXTRUSION_SPEED_DATA )
-    {
-        float* data = (float*)(&(local_buffer[1]));
-        this->hw_filament_mover_state_ = (double)(*data);
-        this->fil_mover_state_rcvd_ = true;
-        
-    }
-    else if ( len == 5 && cmd_byte == MSG_HEATING_DATA )
-    {
-        float* data = (float*)(&(local_buffer[1]));
-        this->hw_filament_heater_state_ = (double)(*data);
-        this->fil_heater_state_rcvd_ = true;
-    }
-
-    return;
-}
-
-#define LBUF_SIZE 5
-#define READ_TIMEOUT_US 100
-
-void AMExtruderHardware::processBytes()
-{
-    static int numBytesTot  = 1;
-    static int numBytesRcvd = 0;
-    static char local_buffer[LBUF_SIZE] = {0};
-
-    std::chrono::time_point<std::chrono::system_clock> start_time = std::chrono::system_clock::now();
-    std::chrono::time_point<std::chrono::system_clock> end_time = start_time + std::chrono::duration<double, std::micro>(READ_TIMEOUT_US);
-    bool timed_out = false;
-    bool continue_reading = true;
-    while (continue_reading && !timed_out)
-    {
-        if (numBytesRcvd < 1)
-        {
-            RS232_PollComport(this->hw_com_port_number_, &(local_buffer[0]), 1);
-            switch (local_buffer[0])
-            {
-            case MSG_EXTRUSION_SPEED_DATA:
-                numBytesTot  = 5;
-                numBytesRcvd = 1;
-                break;
-
-            case MSG_HEATING_DATA:
-                numBytesTot  = 5;
-                numBytesRcvd = 1;
-                break;
-
-            default:
-                break;
-            }
-        }
-
-        /* Read numBytesTot-1 extra bytes */
-        else if (numBytesRcvd < numBytesTot)
-        {
-            int num_read = RS232_PollComport(this->hw_com_port_number_, &(local_buffer[numBytesRcvd]), numBytesTot-numBytesRcvd);
-            numBytesRcvd += num_read;
-        }
-
-        /* Execute command when all bytes have been read */
-        if (numBytesRcvd >= numBytesTot)
-        {
-            this->parseData(local_buffer, LBUF_SIZE);
-            numBytesTot  = 1;
-            numBytesRcvd = 0;
-        }
-
-        continue_reading = !(this->fil_mover_state_rcvd_ && this->fil_heater_state_rcvd_);
-        timed_out = (end_time <= std::chrono::system_clock::now());
-    }
-
-    return;
-}
-
-
-
 hardware_interface::return_type AMExtruderHardware::read()
 {
-    if (RS232_SendByte(this->hw_com_port_number_, MSG_EXTRUSION_SPEED_DATA))
-    {
-        RCLCPP_ERROR(
-            rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            "Error transmitting '%s' on COM port %s!",
-            MSG_EXTRUSION_SPEED_DATA, this->hw_com_port_number_.c_str());
-    }
-
-    if (RS232_SendByte(this->hw_com_port_number_, MSG_HEATING_DATA))
-    {
-        RCLCPP_ERROR(
-            rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            "Error transmitting '%s' on COM port %s!",
-            MSG_HEATING_DATA, this->hw_com_port_number_.c_str());
-    }
-
-    this->processBytes();
+    this->hw_filament_mover_state_  = this->mover_val_;
+    this->hw_filament_heater_state_ = this->heater_val_;
 
     return return_type::OK;
 }
 
 #define MSG_CMD_SET_HEATING         'H'
 #define MSG_CMD_SET_EXTRUSION_SPEED 'X'
-
-float AMExtruderhardware::calcExtruderSetValue(double filament_mover_val)
-{
-    // Use parameter values to calculate extruderSetValue
-    return 0.0;
-}
-
-double AMExtruderhardware::calcExtruderSpeed(float filament_speed_val)
-{
-
-    return 0.0;
-}
 
 hardware_interface::return_type AMExtruderHardware::write()
 {
