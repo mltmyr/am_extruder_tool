@@ -3,40 +3,127 @@
 
     <xacro:macro name="am_extruder_tool" params="parent prefix">
         <xacro:property name="PI" value="3.1415926535897931"/>
-        <xacro:property name="mass" value="1.0"/>
-        <xacro:property name="height1" value="2.0"/>
+        <xacro:property name="mass" value="0.472"/>
+        <xacro:property name="nozzle_z_adjust" value="0.0"/>
         
-        <joint name="${prefix}_base_joint" type="fixed">
+        <joint name="${prefix}_mounting_joint" type="fixed">
             <parent link="${parent}"/>
-            <chield link="${prefix}_base_link"/>
+            <chield link="${prefix}_bracket_link"/>
         </joint>
         
         <!-- Base extruder link -->
-        <link name="${prefix}_base_link">
-            <collision>
-                <origin xyz="0 0 0" rpy="0 0 0"/>
-                <geometry>
-                    <box size="1 1 1"/>
-                </geometry>
-            </collision>
-            
-            <visual>
-                <origin xyz="0 0 0" rpy="0 0 0"/>
-                <geometry>
-                    <box size="1 1 1"/>
-                </geometry>
-                <material name="blue"/>
-            </visual>
-            
-            <intertial>
-                <origin xyz="0 0 0" rpy="0 0 0"/>
-                <mass value="1"/>
-                <inertia ixx="1" ixy="0" ixz="0"
-                         iyy="1" iyz="0"
-                         izz="1"/>
-            </intertial>
+        <link name="${prefix}_bracket_link">
         </link>
         
+        <joint name="${prefix}_bracket_to_motor_joint" type="fixed">
+            <origin xyz="0.05466 0.0305 -0.00130" rpy="0 -${PI}/4 0"/>
+            <parent link="${prefix}_bracket_link"/>
+            <chield link="${prefix}_motor_link"/>
+        </joint>
+        
+        <link name="${prefix}_motor_link">
+            <intertial>
+                <origin xyz="-0.016 0.005 -0.010" rpy="0 0 0"/> <!-- This is an initial guess on the center of gravity for the extruder tool. [TODO: Do a better estimate] -->
+                <mass value="${mass}"/>
+                <inertia ixx="0"  ixy="0"  ixz="0" iyy="0" iyz="0" izz="0" />
+            </intertial>
+            <visual> <!-- Motor and extruder chamber -->
+                <origin xyz="-0.0065 0 0" rpy="0 0 0" /> 
+                <geometry>
+                    <box size="0.067 0.0423 0.0423"/> <!-- Only reflects the motor volume. -->
+                </geometry>
+                <material name="Cyan">
+                    <color rgba="0 1.0 1.0 1.0"/>
+                </material>
+            </visual>
+        </link>
+        
+        <joint name="${prefix}_motor_to_vulcano_top_joint" type="fixed">
+            <origin xyz="0.0155 0.0111 -0.0083" rpy="0 0 0"/>
+            <parent link="${prefix}_motor_link"/>
+            <chield link="${prefix}_vulcano_top_link"/>
+        </joint>
+        
+        <link name="${prefix}_vulcano_top_link">
+            <visual> <!-- Cooler block -->
+                <origin xyz="0 0 -0.0323/2" rpy="0 0 0" /> 
+                <geometry>
+                    <cylinder radius="0.0118" length="0.0323"/>
+                </geometry>
+                <material name="Cyan">
+                    <color rgba="0 1.0 1.0 1.0"/>
+                </material>
+            </visual>
+            <visual> <!-- Heater block -->
+                <origin xyz="-0.00035 -0.0038 -0.05525" rpy="0 0 0" /> 
+                <geometry>
+                    <box size="0.0135 0.0087 0.045"/>
+                </geometry>
+                <material name="Cyan">
+                    <color rgba="0 1.0 1.0 1.0"/>
+                </material>
+            </visual>
+            <visual> <!-- Nozzle -->
+                <origin xyz="0 0 -0.0682-(${nozzle_z_adjust}/2)" rpy="0 0 0" /> 
+                <geometry>
+                    <cylinder radius="0.0043" length="0.0055+${nozzle_z_adjust}"/>
+                </geometry>
+                <material name="Cyan">
+                    <color rgba="0 1.0 1.0 1.0"/>
+                </material>
+            </visual>
+        </link>
+        
+        <joint name="${prefix}_vulcano_top_to_nozzle_tip_joint" type="fixed">
+            <origin xyz="0 0 (-0.071+${nozzle_z_adjust})" rpy="0 0 0"/>
+            <parent link="${prefix}_vulcano_top_link"/>
+            <chield link="${prefix}_nozzle_tip"/>
+        </joint>
+        
+        <link name="${prefix}_nozzle_tip_link">
+        </link>
     </xacro:macro>
-
 </robot>
+
+
+
+
+
+
+<!-- 
+X forward
+Y left
+Z up
+Roll around x-axis
+Pitch around y-axis
+Yaw around z-axis
+
+79.5mm
+
+Base to motor:
+X = 54.6586mm
+Y = 30.5000mm
+Z = -1.2972mm
+
+r =   0.0deg
+p = -45.0deg
+y =   0.0deg
+
+Motor to vulcano-top:
+X = 13.5mm + 2.0mm = 15.5mm
+Y = 11.1mm
+Z =  -8.3mm
+
+r =  0.0deg
+p =  0.0deg
+y =  0.0deg
+
+Vulcano-top to nozzle-tip:
+X = 0.0mm
+Y = 0.0mm
+Z = -71mm
+
+r = 0.0deg
+p = 0.0deg
+y = 0.0deg
+-->
