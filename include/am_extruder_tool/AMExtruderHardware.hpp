@@ -36,10 +36,12 @@ private:
     void parseData(char* local_buffer, int len);
     void processBytes();
 
+    float  calcStepperFrequency(double extrusion_speed_mm_per_sec);
+    double calcExtrusionSpeed(float stepper_frequency);
+
     void readSerial();
     std::thread* reader_thread_ptr;
     std::atomic<bool> is_running;
-
 
     std::string hw_com_port_name_;
     int         hw_com_port_number_;
@@ -50,11 +52,13 @@ private:
     double hw_gear_ratio_;
     double hw_hobb_gear_diameter_mm_;
     double hw_filament_diameter_mm_;
+    
+    double hw_steps_per_mm_filament_;
 
-    std::atomic<float> mover_val_;
+    std::atomic<float> mover_val_;    // Steps/Second
     std::atomic<float> heater_val_;
-
-    float hw_filament_mover_state_;
+    
+    float hw_filament_mover_state_;   // millimeter filament/Second
     float hw_filament_mover_command_;
     
     float hw_filament_heater_state_;

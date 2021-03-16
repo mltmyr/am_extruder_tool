@@ -1,5 +1,8 @@
 #include "AMExtruderHardware.h"
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <thread>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
@@ -11,24 +14,6 @@ namespace am_extruder_tool
 {
 
 
-
-float AMExtruderhardware::calcExtruderSetValue(double filament_mover_val)
-{
-    // Use parameter values to calculate extruderSetValue
-    hw_stepper_motor_steps_per_revolution_;
-    int    hw_micro_stepping_;
-    double hw_gear_ratio_;
-    double hw_hobb_gear_diameter_mm_;
-    double hw_filament_diameter_mm_;
-
-    return 0.0;
-}
-
-double AMExtruderhardware::calcExtruderSpeed(float filament_speed_val)
-{
-
-    return 0.0;
-}
 
 #define MSG_EXTRUSION_SPEED_DATA 'E'
 #define MSG_HEATING_DATA         'T'
@@ -120,7 +105,7 @@ void AMExtruderhardware::readSerial()
 
 double calc_stepper_motor_steps_per_mm_filament(double mot_steps_per_rev, int micro_stepping, double gear_ratio, hobb_diam_mm)
 {
-    return mot_steps_per_rev*(double)micro_stepping*gear_ratio/hobb_diam_mm;
+    return mot_steps_per_rev*(double)micro_stepping*gear_ratio/(hobb_diam_mm*M_PI);
 }
 
 AMExtruderhardware::AMExtruderhardware()
@@ -194,7 +179,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
     this->hw_filament_heater_state_   = std::numeric_limits<double>::quiet_NaN();
     this->hw_filament_heater_command_ = std::numeric_limits<double>::quiet_NaN();
 
-    this->hw_steps_per_mm_filament = calc_stepper_motor_steps_per_mm_filament(
+    this->hw_steps_per_mm_filament_ = calc_stepper_motor_steps_per_mm_filament(
         this->hw_stepper_motor_steps_per_revolution_, this->hw_micro_stepping_,
         this->hw_gear_ratio_, this->hw_hobb_gear_diameter_mm_);
 
@@ -413,7 +398,7 @@ return_type AMExtruderHardware::stop()
 
 hardware_interface::return_type AMExtruderHardware::read()
 {
-    this->hw_filament_mover_state_  = this->mover_val_;
+    this->hw_filament_mover_state_  = calcExtrusionSpeed(this->mover_val_);
     this->hw_filament_heater_state_ = this->heater_val_;
 
     return return_type::OK;
@@ -422,11 +407,24 @@ hardware_interface::return_type AMExtruderHardware::read()
 #define MSG_CMD_SET_HEATING         'H'
 #define MSG_CMD_SET_EXTRUSION_SPEED 'X'
 
+
+float AMExtruderhardware::calcStepperFrequency(double extrusion_speed_mm_per_sec)
+{
+    return (float)((this->hw_steps_per_mm_filament_)*extrusion_speed_mm_per_sec);
+}
+
+double AMExtruderhardware::calcExtrusionSpeed(float stepper_frequency)
+{
+
+    return ((double)stepper_frequency)/(this->hw_steps_per_mm_filament_);
+}
+
+
 hardware_interface::return_type AMExtruderHardware::write()
 {
     unsigned char buf[1+sizeof(float)];
 
-    float extruder_set_value = calcExtruderSetValue(this->hw_filament_mover_command_);
+    float extruder_set_value = this->calcStepperFrequency(this->hw_filament_mover_command_);
 
     buf[0] = MSG_CMD_SET_EXTRUSION_SPEED;
     memcpy(&(buf[1]), (unsigned char*)&(extruder_set_value), sizeof(float));
