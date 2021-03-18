@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <thread>
+#include <atomic>
 
 #include "rclcpp/macros.hpp"
 
@@ -21,20 +23,23 @@ namespace am_extruder_tool
 class AMExtruderHardware : public hardware_interface::BaseInterface<hardware_interface::ActuatorInterface>
 {
 public:
-    return_type configure(const hardware_interface::HardwareInfo & info) override;
+    AMExtruderHardware();
+    ~AMExtruderHardware();
+
+    hardware_interface::return_type configure(const hardware_interface::HardwareInfo & info) override;
 
     std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
     std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
 
-    return_type start() override;
-    return_type stop() override;
+    hardware_interface::return_type start() override;
+    hardware_interface::return_type stop() override;
 
-    return_type read() override;
-    return_type write() override;
+    hardware_interface::return_type read() override;
+    hardware_interface::return_type write() override;
 
 private:
-    void parseData(char* local_buffer, int len);
-    void processBytes();
+    void parseData(unsigned char* local_buffer, int len);
+    void processByte();
 
     float  calcStepperFrequency(double extrusion_speed_mm_per_sec);
     double calcExtrusionSpeed(float stepper_frequency);
@@ -58,11 +63,11 @@ private:
     std::atomic<float> mover_val_;    // Steps/Second
     std::atomic<float> heater_val_;
     
-    float hw_filament_mover_state_;   // millimeter filament/Second
-    float hw_filament_mover_command_;
+    double hw_filament_mover_state_;   // millimeter filament/Second
+    double hw_filament_mover_command_;
     
-    float hw_filament_heater_state_;
-    float hw_filament_heater_command_;
+    double hw_filament_heater_state_;
+    double hw_filament_heater_command_;
 };
 
 } // namespace am_extruder_tool
