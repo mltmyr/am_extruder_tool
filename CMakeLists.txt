@@ -43,6 +43,7 @@ pluginlib_export_plugin_description_file(hardware_interface am_extruder_tool_har
 # install
 install(TARGETS ${PROJECT_NAME} DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY description DESTINATION share/${PROJECT_NAME})
 
 # tests
 if(BUILD_TESTING)
