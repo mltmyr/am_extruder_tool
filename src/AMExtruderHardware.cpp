@@ -123,7 +123,7 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
         return hardware_interface::return_type::ERROR;
     }
 
-    this->hw_com_port_name_ = stod(this->info_.hardware_parameters["com_port_name"]);
+    this->hw_com_port_name_ = this->info_.hardware_parameters["com_port_name"];
     this->hw_com_port_number_ = RS232_GetPortnr(this->hw_com_port_name_.c_str());
     if (this->hw_com_port_number_ == -1)
     {
@@ -141,7 +141,7 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
     }
     
 
-    this->hw_baud_rate_ = stod(this->info_.hardware_parameters["com_port_baud_rate"]);
+    this->hw_baud_rate_ = stoi(this->info_.hardware_parameters["com_port_baud_rate"]);
     switch (this->hw_baud_rate_)
     {
         case 9600:
@@ -164,8 +164,8 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
             break;
     }
 
-    this->hw_stepper_motor_steps_per_revolution_ = stod(this->info_.hardware_parameters["stepper_motor_steps_per_revolution"]);
-    this->hw_micro_stepping_        = stod(this->info_.hardware_parameters["micro_stepping"]);
+    this->hw_stepper_motor_steps_per_revolution_ = stoi(this->info_.hardware_parameters["stepper_motor_steps_per_revolution"]);
+    this->hw_micro_stepping_        = stoi(this->info_.hardware_parameters["micro_stepping"]);
     this->hw_gear_ratio_            = stod(this->info_.hardware_parameters["gear_ratio"]);
     this->hw_hobb_gear_diameter_mm_ = stod(this->info_.hardware_parameters["hobb_gear_diameter_mm"]);
     this->hw_filament_diameter_mm_  = stod(this->info_.hardware_parameters["filament_diameter_mm"]);
@@ -359,19 +359,18 @@ std::vector<hardware_interface::CommandInterface> AMExtruderHardware::export_com
 
 hardware_interface::return_type AMExtruderHardware::start()
 {
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "start");
     char mode[]={'8','N','1'};
     if (RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0))
     {
-        RCLCPP_ERROR(
+        /*RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Could not open COM port '%s'!",
             this->hw_com_port_name_.c_str());
-        return hardware_interface::return_type::ERROR;
+        return hardware_interface::return_type::ERROR;*/
     }
 
     this->is_running = true;
-
-    // 2. Enable Extruder
 
     this->status_ = hardware_interface::status::STARTED;
 
@@ -380,6 +379,7 @@ hardware_interface::return_type AMExtruderHardware::start()
 
 hardware_interface::return_type AMExtruderHardware::stop()
 {
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "stop");
     // 1. Set heating and extrusion to safe default values.
     // (2. Disable Extruder)
 
@@ -395,6 +395,7 @@ hardware_interface::return_type AMExtruderHardware::stop()
 
 hardware_interface::return_type AMExtruderHardware::read()
 {
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "read");
     this->hw_filament_mover_state_  = calcExtrusionSpeed(this->mover_val_);
     this->hw_filament_heater_state_ = this->heater_val_;
 
@@ -419,6 +420,7 @@ double AMExtruderHardware::calcExtrusionSpeed(float stepper_frequency)
 
 hardware_interface::return_type AMExtruderHardware::write()
 {
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "write");
     unsigned char buf[1+sizeof(float)];
 
     float extruder_set_value = this->calcStepperFrequency(this->hw_filament_mover_command_);
@@ -427,22 +429,22 @@ hardware_interface::return_type AMExtruderHardware::write()
     memcpy(&(buf[1]), (unsigned char*)&(extruder_set_value), sizeof(float));
     if (RS232_SendBuf(this->hw_com_port_number_, buf, sizeof(buf)))
     {
-        RCLCPP_ERROR(
+        /*RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Error transmitting '%s%f' on COM port %s!",
             MSG_CMD_SET_EXTRUSION_SPEED, this->hw_filament_mover_command_,
-            this->hw_com_port_name_);
+            this->hw_com_port_name_);*/
     }
 
     buf[0] = MSG_CMD_SET_HEATING;
     memcpy(&(buf[1]), (unsigned char*)&(this->hw_filament_heater_command_), sizeof(float));
     if (RS232_SendBuf(this->hw_com_port_number_, buf, sizeof(buf)))
     {
-         RCLCPP_ERROR(
+         /*RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Error transmitting '%s%f' on COM port %s!",
             MSG_CMD_SET_HEATING, this->hw_filament_heater_command_,
-            this->hw_com_port_name_);
+            this->hw_com_port_name_);*/
     }
 
     return hardware_interface::return_type::OK;
