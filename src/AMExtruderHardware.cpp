@@ -9,8 +9,82 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+//#define SIMULATE_EXTRUDER
+
 namespace am_extruder_tool
 {
+
+#ifdef SIMULATE_EXTRUDER
+#include <chrono>
+#
+
+class FirstOrderProcessSimulation
+{
+public:
+    FirstOrderProcessSimulation(double T, double K, double x0, double sampling_hz)
+        : x(x0), u(0)
+    {
+        t_duration = std::chrono::microseconds((long int)(1000000.0/sampling_hz));
+        dt = t_duration.count()/1000000.0;
+
+        this->T = T;
+        this->K = K;
+        //this->x = x0;
+        this->x_prev = x0;
+
+        a = (2*T - dt)/(2*T + dt);
+        b =     (K*dt)/(2*T + dt);
+
+        //u = 0;
+        u_prev = 0;
+        
+        t_end = std::chrono::steady_clock::now();
+    }
+
+    void process()
+    {
+        t_now = std::chrono::steady_clock::now();
+        if (t_now >= t_end)
+        {
+            x_prev = x;
+            x = a*x_prev + b*(u + u_prev);
+            u_prev = u;
+
+            t_end = t_now + t_duration;
+        }
+        return;
+    }
+
+    double readState()
+    {
+        return this->x;
+    }
+    void actuate(double u)
+    {
+        this->u = u;
+        return;
+    }
+
+private:
+    std::atomic<double> x, u;
+    double x_prev, u_prev;
+
+    double dt;
+    double T, K;
+    double a, b;
+
+    std::chrono::duration<long int, std::ratio<1,1000000>> t_duration;
+    std::chrono::time_point<std::chrono::steady_clock> t_now;
+    std::chrono::time_point<std::chrono::steady_clock> t_end;
+
+};
+
+FirstOrderProcessSimulation temperature_sim(220.0, 13.0, 25.0, 5.0);
+FirstOrderProcessSimulation filament_speed_sim(0.1, 1.0, 0.0, 10.0);
+bool read_temp = true;
+
+#endif
+
 
 #define MSG_EXTRUSION_SPEED_DATA 'E'
 #define MSG_HEATING_DATA         'T'
@@ -48,7 +122,18 @@ void AMExtruderHardware::processByte()
 
     if (numBytesRcvd < 1)
     {
+#ifndef SIMULATE_EXTRUDER
         RS232_PollComport(this->hw_com_port_number_, &(local_buffer[0]), 1);
+#else
+        if (read_temp)
+        {
+            local_buffer[0] = MSG_HEATING_DATA;
+        }
+        else
+        {
+            local_buffer[0] = MSG_EXTRUSION_SPEED_DATA;
+        }
+#endif
         switch (local_buffer[0])
         {
         case MSG_EXTRUSION_SPEED_DATA:
@@ -69,7 +154,23 @@ void AMExtruderHardware::processByte()
     /* Read numBytesTot-1 extra bytes */
     else if (numBytesRcvd < numBytesTot)
     {
+#ifndef SIMULATE_EXTRUDER
         int num_read = RS232_PollComport(this->hw_com_port_number_, &(local_buffer[numBytesRcvd]), numBytesTot-numBytesRcvd);
+#else
+        float temp;
+        if (read_temp)
+        {
+            temp = float(temperature_sim.readState());
+            read_temp = false;
+        }
+        else
+        {
+            temp = float(filament_speed_sim.readState());
+            read_temp = true;
+        }
+        memcpy(&local_buffer[numBytesRcvd], &temp, numBytesTot-numBytesRcvd);
+        int num_read = numBytesTot-numBytesRcvd;
+#endif
         numBytesRcvd += num_read;
     }
 
@@ -88,6 +189,11 @@ void AMExtruderHardware::readSerial()
 {
     while (true)
     {
+#ifdef SIMULATE_EXTRUDER
+        temperature_sim.process();
+        filament_speed_sim.process();
+#endif
+
         if (this->is_running)
         {
             this->processByte();
@@ -124,7 +230,9 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
     }
 
     this->hw_com_port_name_ = this->info_.hardware_parameters["com_port_name"];
+#ifndef SIMULATE_EXTRUDER
     this->hw_com_port_number_ = RS232_GetPortnr(this->hw_com_port_name_.c_str());
+
     if (this->hw_com_port_number_ == -1)
     {
         RCLCPP_WARN(
@@ -139,7 +247,7 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
             "Using COM port '%s' (COM number: %d).",
             this->hw_com_port_name_.c_str(), this->hw_com_port_number_);
     }
-    
+#endif
 
     this->hw_baud_rate_ = stoi(this->info_.hardware_parameters["com_port_baud_rate"]);
     switch (this->hw_baud_rate_)
@@ -171,10 +279,10 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
     this->hw_filament_diameter_mm_  = stod(this->info_.hardware_parameters["filament_diameter_mm"]);
     
     this->hw_filament_mover_state_   = std::numeric_limits<double>::quiet_NaN();
-    this->hw_filament_mover_command_ = std::numeric_limits<double>::quiet_NaN();
+    this->hw_filament_mover_command_ = 0.0; //std::numeric_limits<double>::quiet_NaN();
 
     this->hw_filament_heater_state_   = std::numeric_limits<double>::quiet_NaN();
-    this->hw_filament_heater_command_ = std::numeric_limits<double>::quiet_NaN();
+    this->hw_filament_heater_command_ = 0.0; //std::numeric_limits<double>::quiet_NaN();
 
     this->hw_steps_per_mm_filament_ = calc_stepper_motor_steps_per_mm_filament(
         this->hw_stepper_motor_steps_per_revolution_, this->hw_micro_stepping_,
@@ -360,15 +468,17 @@ std::vector<hardware_interface::CommandInterface> AMExtruderHardware::export_com
 hardware_interface::return_type AMExtruderHardware::start()
 {
     RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "start");
+#ifndef SIMULATE_EXTRUDER
     char mode[]={'8','N','1'};
     if (RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0))
     {
-        /*RCLCPP_ERROR(
+        RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Could not open COM port '%s'!",
             this->hw_com_port_name_.c_str());
-        return hardware_interface::return_type::ERROR;*/
+        return hardware_interface::return_type::ERROR;
     }
+#endif
 
     this->is_running = true;
 
@@ -383,8 +493,10 @@ hardware_interface::return_type AMExtruderHardware::stop()
     // 1. Set heating and extrusion to safe default values.
     // (2. Disable Extruder)
 
+#ifndef SIMULATE_EXTRUDER
     RS232_flushRXTX(this->hw_com_port_number_);
     RS232_CloseComport(this->hw_com_port_number_);
+#endif
 
     this->is_running = false;
 
@@ -399,6 +511,7 @@ hardware_interface::return_type AMExtruderHardware::read()
     this->hw_filament_mover_state_  = calcExtrusionSpeed(this->mover_val_);
     this->hw_filament_heater_state_ = this->heater_val_;
 
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "temp: %f", this->hw_filament_heater_state_);
     return hardware_interface::return_type::OK;
 }
 
@@ -427,25 +540,33 @@ hardware_interface::return_type AMExtruderHardware::write()
 
     buf[0] = MSG_CMD_SET_EXTRUSION_SPEED;
     memcpy(&(buf[1]), (unsigned char*)&(extruder_set_value), sizeof(float));
+#ifndef SIMULATE_EXTRUDER
     if (RS232_SendBuf(this->hw_com_port_number_, buf, sizeof(buf)))
     {
-        /*RCLCPP_ERROR(
+        RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Error transmitting '%s%f' on COM port %s!",
             MSG_CMD_SET_EXTRUSION_SPEED, this->hw_filament_mover_command_,
-            this->hw_com_port_name_);*/
+            this->hw_com_port_name_);
     }
+#else
+    filament_speed_sim.actuate(extruder_set_value);
+#endif
 
     buf[0] = MSG_CMD_SET_HEATING;
     memcpy(&(buf[1]), (unsigned char*)&(this->hw_filament_heater_command_), sizeof(float));
+#ifndef SIMULATE_EXTRUDER
     if (RS232_SendBuf(this->hw_com_port_number_, buf, sizeof(buf)))
     {
-         /*RCLCPP_ERROR(
+         RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Error transmitting '%s%f' on COM port %s!",
             MSG_CMD_SET_HEATING, this->hw_filament_heater_command_,
-            this->hw_com_port_name_);*/
+            this->hw_com_port_name_);
     }
+#else
+    temperature_sim.actuate(this->hw_filament_heater_command_);
+#endif
 
     return hardware_interface::return_type::OK;
 }
