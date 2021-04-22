@@ -8,7 +8,7 @@
         
         <joint name="${prefix}_mounting_joint" type="fixed">
             <parent link="${parent}"/>
-            <chield link="${prefix}_bracket_link"/>
+            <child link="${prefix}_bracket_link"/>
         </joint>
         
         <!-- Base extruder link -->
@@ -16,9 +16,9 @@
         </link>
         
         <joint name="${prefix}_bracket_to_motor_joint" type="fixed">
-            <origin xyz="0.05466 0.0305 -0.00130" rpy="0 -${PI}/4 0"/>
+            <origin xyz="0.05466 0.0305 -0.00130" rpy="0 -${PI/4} 0"/>
             <parent link="${prefix}_bracket_link"/>
-            <chield link="${prefix}_motor_link"/>
+            <child link="${prefix}_motor_link"/>
         </joint>
         
         <link name="${prefix}_motor_link">
@@ -41,12 +41,12 @@
         <joint name="${prefix}_motor_to_vulcano_top_joint" type="fixed">
             <origin xyz="0.0155 0.0111 -0.0083" rpy="0 0 0"/>
             <parent link="${prefix}_motor_link"/>
-            <chield link="${prefix}_vulcano_top_link"/>
+            <child link="${prefix}_vulcano_top_link"/>
         </joint>
         
         <link name="${prefix}_vulcano_top_link">
             <visual> <!-- Cooler block -->
-                <origin xyz="0 0 -0.0323/2" rpy="0 0 0" /> 
+                <origin xyz="0 0 ${-0.0323/2}" rpy="0 0 0" /> 
                 <geometry>
                     <cylinder radius="0.0118" length="0.0323"/>
                 </geometry>
@@ -64,9 +64,9 @@
                 </material>
             </visual>
             <visual> <!-- Nozzle -->
-                <origin xyz="0 0 -0.0682-(${nozzle_z_adjust}/2)" rpy="0 0 0" /> 
+                <origin xyz="0 0 ${-0.0682-nozzle_z_adjust/2}" rpy="0 0 0" /> 
                 <geometry>
-                    <cylinder radius="0.0043" length="0.0055+${nozzle_z_adjust}"/>
+                    <cylinder radius="0.0043" length="${0.0055+nozzle_z_adjust}"/>
                 </geometry>
                 <material name="Cyan">
                     <color rgba="0 1.0 1.0 1.0"/>
@@ -75,9 +75,9 @@
         </link>
         
         <joint name="${prefix}_vulcano_top_to_nozzle_tip_joint" type="fixed">
-            <origin xyz="0 0 (-0.071+${nozzle_z_adjust})" rpy="0 0 0"/>
+            <origin xyz="0 0 ${-0.071+nozzle_z_adjust}" rpy="0 0 0"/>
             <parent link="${prefix}_vulcano_top_link"/>
-            <chield link="${prefix}_nozzle_tip"/>
+            <child link="${prefix}_nozzle_tip_link"/>
         </joint>
         
         <link name="${prefix}_nozzle_tip_link">

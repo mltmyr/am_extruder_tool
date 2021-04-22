@@ -1,0 +1,9 @@
+<library path="am_extruder_tool">
+	<class name="am_extruder_tool/AMExtruderHardware"
+		   type="am_extruder_tool::AMExtruderHardware"
+		   base_class_type="hardware_interface::ActuatorInterface">
+	    <description>
+	    	AM extruder hardware interface. Featuring heating and filament movement of a custom extruder head.
+	    </description>
+	</class>
+</library>

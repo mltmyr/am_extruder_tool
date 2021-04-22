@@ -1,31 +1,28 @@
-#include "AMExtruderHardware.h"
+#include "am_extruder_tool/AMExtruderHardware.hpp"
+#include "RS-232/rs232.h"
 
 #define _USE_MATH_DEFINES
 #include <cmath>
-
 #include <thread>
+#include <atomic>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-#include "RS-232/rs232.h"
-
 namespace am_extruder_tool
 {
-
-
 
 #define MSG_EXTRUSION_SPEED_DATA 'E'
 #define MSG_HEATING_DATA         'T'
 
-void AMExtruderhardware::parseData(char* local_buffer, int len)
+void AMExtruderHardware::parseData(unsigned char* local_buffer, int len)
 {
     if (len <= 0)
     {
         return;
     }
 
-    char cmd_byte = local_buffer[0];
+    unsigned char cmd_byte = local_buffer[0];
 
     if ( len == 5 && cmd_byte == MSG_EXTRUSION_SPEED_DATA )
     {
@@ -47,7 +44,7 @@ void AMExtruderHardware::processByte()
 {
     static int numBytesTot  = 1;
     static int numBytesRcvd = 0;
-    static char local_buffer[LBUF_SIZE] = {0};
+    static unsigned char local_buffer[LBUF_SIZE] = {0};
 
     if (numBytesRcvd < 1)
     {
@@ -87,7 +84,7 @@ void AMExtruderHardware::processByte()
     return;
 }
 
-void AMExtruderhardware::readSerial()
+void AMExtruderHardware::readSerial()
 {
     while (true)
     {
@@ -103,34 +100,34 @@ void AMExtruderhardware::readSerial()
     return;
 }
 
-double calc_stepper_motor_steps_per_mm_filament(double mot_steps_per_rev, int micro_stepping, double gear_ratio, hobb_diam_mm)
+double calc_stepper_motor_steps_per_mm_filament(int mot_steps_per_rev, int micro_stepping, double gear_ratio, double hobb_diam_mm)
 {
-    return mot_steps_per_rev*(double)micro_stepping*gear_ratio/(hobb_diam_mm*M_PI);
+    return (double)(mot_steps_per_rev*micro_stepping)*gear_ratio/(hobb_diam_mm*M_PI);
 }
 
-AMExtruderhardware::AMExtruderhardware()
-    : is_running(false), reader_thread_ptr(nullptr)
+AMExtruderHardware::AMExtruderHardware()
+    : reader_thread_ptr(nullptr), is_running(false)
 {
 
 }
 
-AMExtruderhardware::~AMExtruderhardware()
+AMExtruderHardware::~AMExtruderHardware()
 {
     delete reader_thread_ptr;
 }
 
-return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo & info)
+hardware_interface::return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo & info)
 {
-    if (this->configure_default(info) != return_type::OK)
+    if (this->configure_default(info) != hardware_interface::return_type::OK)
     {
-        return return_type::ERROR;
+        return hardware_interface::return_type::ERROR;
     }
 
-    this->hw_com_port_name_ = stod(this->info_.hardware_interface["com_port_name"]);
+    this->hw_com_port_name_ = this->info_.hardware_parameters["com_port_name"];
     this->hw_com_port_number_ = RS232_GetPortnr(this->hw_com_port_name_.c_str());
     if (this->hw_com_port_number_ == -1)
     {
-        RCLCPP_WARNING(
+        RCLCPP_WARN(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Could not find COM port number for COM port with name %s.",
             this->hw_com_port_name_.c_str());
@@ -144,7 +141,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
     }
     
 
-    this->hw_baud_rate_ = stod(this->info_.hardware_interface["com_port_baud_rate"]);
+    this->hw_baud_rate_ = stoi(this->info_.hardware_parameters["com_port_baud_rate"]);
     switch (this->hw_baud_rate_)
     {
         case 9600:
@@ -159,7 +156,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
             break;
 
         default:
-            RCLCPP_WARNING(
+            RCLCPP_WARN(
                 rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
                 "Non-supported baudrate (%d) set! Changed to default value 9600.",
                 this->hw_baud_rate_);
@@ -167,8 +164,8 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
             break;
     }
 
-    this->hw_stepper_motor_steps_per_revolution_ = stod(this->info_.hardware_parameters["stepper_motor_steps_per_revolution"]);
-    this->hw_micro_stepping_        = stod(this->info_.hardware_parameters["micro_stepping"]);
+    this->hw_stepper_motor_steps_per_revolution_ = stoi(this->info_.hardware_parameters["stepper_motor_steps_per_revolution"]);
+    this->hw_micro_stepping_        = stoi(this->info_.hardware_parameters["micro_stepping"]);
     this->hw_gear_ratio_            = stod(this->info_.hardware_parameters["gear_ratio"]);
     this->hw_hobb_gear_diameter_mm_ = stod(this->info_.hardware_parameters["hobb_gear_diameter_mm"]);
     this->hw_filament_diameter_mm_  = stod(this->info_.hardware_parameters["filament_diameter_mm"]);
@@ -197,7 +194,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
                     "Joint '%s' has %d command interfaces found. 1 expected.",
                     joint.name.c_str(), joint.command_interfaces.size());
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
             if (joint.command_interfaces[0].name != hardware_interface::HW_IF_VELOCITY)
             {
@@ -206,7 +203,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     "Have found %s command interface for joint '%s'. '%s' expected.",
                     joint.command_interfaces[0].name.c_str(), joint.name.c_str(),
                     hardware_interface::HW_IF_VELOCITY);
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
 
             if (joint.state_interfaces.size() != 1)
@@ -215,7 +212,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
                     "Joint '%s' has %d state interfaces found. 1 expected.",
                     joint.name.c_str(), joint.state_interfaces.size());
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
             if (joint.state_interfaces[0].name != hardware_interface::HW_IF_VELOCITY)
             {
@@ -224,7 +221,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     "Have found %s state interface for joint '%s'. '%s' expected.",
                     joint.state_interfaces[0].name.c_str(), joint.name.c_str(),
                     hardware_interface::HW_IF_VELOCITY);
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
         }
         else if (joint.name == "filament_heater")
@@ -237,7 +234,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
                     "Joint '%s' has %d command interfaces found. 1 expected.",
                     joint.name.c_str(), joint.command_interfaces.size());
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
             if (joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION)
             {
@@ -246,7 +243,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     "Have found %s command interface for joint '%s'. '%s' expected.",
                     joint.command_interfaces[0].name.c_str(), joint.name.c_str(),
                     hardware_interface::HW_IF_VELOCITY);
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
 
             if (joint.state_interfaces.size() != 1)
@@ -255,7 +252,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
                     "Joint '%s' has %d state interfaces found. 1 expected.",
                     joint.name.c_str(), joint.state_interfaces.size());
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
             if (joint.state_interfaces[0].name != hardware_interface::HW_IF_POSITION)
             {
@@ -264,7 +261,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                     "Have found %s state interface for joint '%s'. '%s' expected.",
                     joint.state_interfaces[0].name.c_str(), joint.name.c_str(),
                     hardware_interface::HW_IF_VELOCITY);
-                return return_type::ERROR;
+                return hardware_interface::return_type::ERROR;
             }
         }
         else
@@ -273,7 +270,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
                 rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
                 "Found unexpected joint named '%s'.",
                 joint.name.c_str());
-            return return_type::ERROR;
+            return hardware_interface::return_type::ERROR;
         }
     }
 
@@ -282,7 +279,7 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
         RCLCPP_FATAL(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Did not find 'filament_mover' joint.");
-        return return_type::ERROR;
+        return hardware_interface::return_type::ERROR;
     }
 
     if (!found_filament_heater_joint)
@@ -290,14 +287,14 @@ return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo
         RCLCPP_FATAL(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Did not find 'filament_heater' joint.");
-        return return_type::ERROR;
+        return hardware_interface::return_type::ERROR;
     }
 
-    this->reader_thread_ptr = new std::thread(AMExtruderhardware::readSerial, this);
+    this->reader_thread_ptr = new std::thread(&AMExtruderHardware::readSerial, this);
     this->reader_thread_ptr->detach();
 
     status_ = hardware_interface::status::CONFIGURED;
-    return return_type::OK;
+    return hardware_interface::return_type::OK;
 }
 
 std::vector<hardware_interface::StateInterface> AMExtruderHardware::export_state_interfaces()
@@ -340,12 +337,12 @@ std::vector<hardware_interface::CommandInterface> AMExtruderHardware::export_com
         
         if (joint_name == "filament_mover")
         {
-            command_interfaces.emplace_back(hardware_interface::StateInterface(
+            command_interfaces.emplace_back(hardware_interface::CommandInterface(
             joint_name, hardware_interface::HW_IF_VELOCITY, &(this->hw_filament_mover_command_)));
         }
         else if (joint_name == "filament_heater")
         {
-            command_interfaces.emplace_back(hardware_interface::StateInterface(
+            command_interfaces.emplace_back(hardware_interface::CommandInterface(
             joint_name, hardware_interface::HW_IF_POSITION, &(this->hw_filament_heater_command_)));
         }
         else
@@ -360,29 +357,29 @@ std::vector<hardware_interface::CommandInterface> AMExtruderHardware::export_com
     return command_interfaces;
 }
 
-return_type AMExtruderHardware::start()
+hardware_interface::return_type AMExtruderHardware::start()
 {
-    char mode[]={'8','N','1',0};
-    if (RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode))
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "start");
+    char mode[]={'8','N','1'};
+    if (RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0))
     {
-        RCLCPP_ERROR(
+        /*RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Could not open COM port '%s'!",
             this->hw_com_port_name_.c_str());
-        return return_type::ERROR;
+        return hardware_interface::return_type::ERROR;*/
     }
 
     this->is_running = true;
 
-    // 2. Enable Extruder
-
     this->status_ = hardware_interface::status::STARTED;
 
-    return return_type::OK;
+    return hardware_interface::return_type::OK;
 }
 
-return_type AMExtruderHardware::stop()
+hardware_interface::return_type AMExtruderHardware::stop()
 {
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "stop");
     // 1. Set heating and extrusion to safe default values.
     // (2. Disable Extruder)
 
@@ -393,27 +390,28 @@ return_type AMExtruderHardware::stop()
 
     this->status_ = hardware_interface::status::STOPPED;
 
-    return return_type::OK;
+    return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type AMExtruderHardware::read()
 {
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "read");
     this->hw_filament_mover_state_  = calcExtrusionSpeed(this->mover_val_);
     this->hw_filament_heater_state_ = this->heater_val_;
 
-    return return_type::OK;
+    return hardware_interface::return_type::OK;
 }
 
 #define MSG_CMD_SET_HEATING         'H'
 #define MSG_CMD_SET_EXTRUSION_SPEED 'X'
 
 
-float AMExtruderhardware::calcStepperFrequency(double extrusion_speed_mm_per_sec)
+float AMExtruderHardware::calcStepperFrequency(double extrusion_speed_mm_per_sec)
 {
     return (float)((this->hw_steps_per_mm_filament_)*extrusion_speed_mm_per_sec);
 }
 
-double AMExtruderhardware::calcExtrusionSpeed(float stepper_frequency)
+double AMExtruderHardware::calcExtrusionSpeed(float stepper_frequency)
 {
 
     return ((double)stepper_frequency)/(this->hw_steps_per_mm_filament_);
@@ -422,6 +420,7 @@ double AMExtruderhardware::calcExtrusionSpeed(float stepper_frequency)
 
 hardware_interface::return_type AMExtruderHardware::write()
 {
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "write");
     unsigned char buf[1+sizeof(float)];
 
     float extruder_set_value = this->calcStepperFrequency(this->hw_filament_mover_command_);
@@ -430,25 +429,25 @@ hardware_interface::return_type AMExtruderHardware::write()
     memcpy(&(buf[1]), (unsigned char*)&(extruder_set_value), sizeof(float));
     if (RS232_SendBuf(this->hw_com_port_number_, buf, sizeof(buf)))
     {
-        RCLCPP_ERROR(
+        /*RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Error transmitting '%s%f' on COM port %s!",
             MSG_CMD_SET_EXTRUSION_SPEED, this->hw_filament_mover_command_,
-            this->hw_com_port_number_.c_str());
+            this->hw_com_port_name_);*/
     }
 
     buf[0] = MSG_CMD_SET_HEATING;
     memcpy(&(buf[1]), (unsigned char*)&(this->hw_filament_heater_command_), sizeof(float));
     if (RS232_SendBuf(this->hw_com_port_number_, buf, sizeof(buf)))
     {
-         RCLCPP_ERROR(
+         /*RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
             "Error transmitting '%s%f' on COM port %s!",
             MSG_CMD_SET_HEATING, this->hw_filament_heater_command_,
-            this->hw_com_port_number_.c_str());
+            this->hw_com_port_name_);*/
     }
 
-    return return_type::OK;
+    return hardware_interface::return_type::OK;
 }
 
 } // namespace am_extruder_tool

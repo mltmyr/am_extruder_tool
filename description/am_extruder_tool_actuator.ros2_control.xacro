@@ -1,12 +1,12 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
     
-    <xacro:macro name="am_extruder_tool_actuator" params="name">
+    <xacro:macro name="am_extruder_tool_actuator" params="name serialport baudrate">
         <ros2_control name="${name}" type="actuator">
             <hardware>
                 <plugin>am_extruder_tool/AMExtruderHardware</plugin>
-                <param name="com_port_name">COM4</param> <!-- https://www.teuniz.net/RS-232/ -->
-                <param name="com_port_baud_rate">9600</param>
+                <param name="com_port_name">${serialport}</param> <!-- https://www.teuniz.net/RS-232/ -->
+                <param name="com_port_baud_rate">${baudrate}</param>
                 
                 <param name="stepper_motor_steps_per_revolution">400</param>
                 <param name="micro_stepping">16</param>
