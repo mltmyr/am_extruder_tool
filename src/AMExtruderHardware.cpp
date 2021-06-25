@@ -16,7 +16,6 @@ namespace am_extruder_tool
 
 #ifdef SIMULATE_EXTRUDER
 #include <chrono>
-#
 
 class FirstOrderProcessSimulation
 {
@@ -470,7 +469,10 @@ hardware_interface::return_type AMExtruderHardware::start()
     RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "start");
 #ifndef SIMULATE_EXTRUDER
     char mode[]={'8','N','1'};
-    if (RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0))
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "før");
+    int err = RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0);
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "etter");
+    if (err != 0)
     {
         RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
