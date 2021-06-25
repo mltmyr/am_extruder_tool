@@ -20,10 +20,16 @@ find_package(ament_cmake REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
 
 # compile project
 add_library(${PROJECT_NAME} SHARED
   src/AMExtruderHardware.cpp
+  src/RS-232/rs232.c
+)
+
+add_executable(am_extruder_com
+  src/AMExtruderComNode.cpp
   src/RS-232/rs232.c
 )
 
@@ -36,12 +42,14 @@ ament_target_dependencies(${PROJECT_NAME}
   hardware_interface
   pluginlib
   rclcpp
+  std_msgs
 )
 
 pluginlib_export_plugin_description_file(hardware_interface am_extruder_tool_hardware.xml)
 
 # install
-install(TARGETS ${PROJECT_NAME} DESTINATION lib)
+install(TARGETS ${PROJECT_NAME} DESTINATION lib/${PROJECT_NAME})
+install(TARGETS am_extruder_com DESTINATION lib/am_extruder_com)
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY description DESTINATION share/${PROJECT_NAME})
 
@@ -62,6 +70,7 @@ ament_export_dependencies(
   hardware_interface
   pluginlib
   rclcpp
+  std_msgs
 )
 
 ament_package()

@@ -5,8 +5,11 @@
 #include <vector>
 #include <thread>
 #include <atomic>
+#include <functional>
 
 #include "rclcpp/macros.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/byte_multi_array.hpp"
 
 #include "hardware_interface/base_interface.hpp"
 #include "hardware_interface/actuator_interface.hpp"
@@ -38,7 +41,7 @@ public:
     hardware_interface::return_type write() override;
 
 private:
-    void parseData(unsigned char* local_buffer, int len);
+    void parseData(const std_msgs::msg::ByteMultiArray::SharedPtr msg);
     void processByte();
 
     float  calcStepperFrequency(double extrusion_speed_mm_per_sec);
@@ -47,6 +50,10 @@ private:
     void readSerial();
     std::thread* reader_thread_ptr;
     std::atomic<bool> is_running;
+
+    rclcpp::Node::SharedPtr node_ptr;
+    rclcpp::Publisher<std_msgs::msg::ByteMultiArray>::SharedPtr    extruder_command_publisher;
+    rclcpp::Subscription<std_msgs::msg::ByteMultiArray>::SharedPtr extruder_data_subscriber;
 
     std::string hw_com_port_name_;
     int         hw_com_port_number_;
