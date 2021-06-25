@@ -16,7 +16,7 @@ namespace am_extruder_tool
 
 #ifdef SIMULATE_EXTRUDER
 #include <chrono>
-#
+
 
 class FirstOrderProcessSimulation
 {
@@ -278,10 +278,10 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
     this->hw_hobb_gear_diameter_mm_ = stod(this->info_.hardware_parameters["hobb_gear_diameter_mm"]);
     this->hw_filament_diameter_mm_  = stod(this->info_.hardware_parameters["filament_diameter_mm"]);
     
-    this->hw_filament_mover_state_   = std::numeric_limits<double>::quiet_NaN();
+    this->hw_filament_mover_state_   = 0.0; //std::numeric_limits<double>::quiet_NaN();
     this->hw_filament_mover_command_ = 0.0; //std::numeric_limits<double>::quiet_NaN();
 
-    this->hw_filament_heater_state_   = std::numeric_limits<double>::quiet_NaN();
+    this->hw_filament_heater_state_   = 0.0; //std::numeric_limits<double>::quiet_NaN();
     this->hw_filament_heater_command_ = 0.0; //std::numeric_limits<double>::quiet_NaN();
 
     this->hw_steps_per_mm_filament_ = calc_stepper_motor_steps_per_mm_filament(
@@ -398,8 +398,8 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
         return hardware_interface::return_type::ERROR;
     }
 
-    this->reader_thread_ptr = new std::thread(&AMExtruderHardware::readSerial, this);
-    this->reader_thread_ptr->detach();
+    //this->reader_thread_ptr = new std::thread(&AMExtruderHardware::readSerial, this);
+    //this->reader_thread_ptr->detach();
 
     status_ = hardware_interface::status::CONFIGURED;
     return hardware_interface::return_type::OK;
@@ -469,8 +469,13 @@ hardware_interface::return_type AMExtruderHardware::start()
 {
     RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "start");
 #ifndef SIMULATE_EXTRUDER
-    char mode[]={'8','N','1'};
-    if (RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0))
+    char mode[]= {'8','N','1'};
+    //if (RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0))
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "før");
+    int err = RS232_OpenComport(this->hw_com_port_number_, this->hw_baud_rate_, mode, 0);
+    //int err = 1;
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "etter");
+    if (err == 1)
     {
         RCLCPP_ERROR(
             rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
@@ -480,9 +485,9 @@ hardware_interface::return_type AMExtruderHardware::start()
     }
 #endif
 
-    this->is_running = true;
-
     this->status_ = hardware_interface::status::STARTED;
+    
+    this->is_running = true;
 
     return hardware_interface::return_type::OK;
 }
