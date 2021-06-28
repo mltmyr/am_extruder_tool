@@ -60,7 +60,7 @@ pluginlib_export_plugin_description_file(hardware_interface am_extruder_tool_har
 
 # install
 install(TARGETS ${PROJECT_NAME} DESTINATION lib/${PROJECT_NAME})
-install(TARGETS am_extruder_com DESTINATION lib/am_extruder_com)
+install(TARGETS am_extruder_com DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY description DESTINATION share/${PROJECT_NAME})
 
