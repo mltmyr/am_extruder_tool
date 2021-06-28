@@ -54,6 +54,7 @@ private:
     rclcpp::Node::SharedPtr node_ptr;
     rclcpp::Publisher<std_msgs::msg::ByteMultiArray>::SharedPtr    extruder_command_publisher;
     rclcpp::Subscription<std_msgs::msg::ByteMultiArray>::SharedPtr extruder_data_subscriber;
+    rclcpp::executors::SingleThreadedExecutor node_spinner;
 
     std::string hw_com_port_name_;
     int         hw_com_port_number_;

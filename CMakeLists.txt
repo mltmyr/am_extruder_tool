@@ -22,14 +22,25 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 
-# compile project
-add_library(${PROJECT_NAME} SHARED
-  src/AMExtruderHardware.cpp
+# compile serial communication helper node
+add_executable(am_extruder_com
+  src/AMExtruderComNode.cpp
   src/RS-232/rs232.c
 )
 
-add_executable(am_extruder_com
-  src/AMExtruderComNode.cpp
+target_include_directories(am_extruder_com
+  PRIVATE include
+  PRIVATE include/RS-232
+)
+
+ament_target_dependencies(am_extruder_com
+  rclcpp
+  std_msgs
+)
+
+# compile project
+add_library(${PROJECT_NAME} SHARED
+  src/AMExtruderHardware.cpp
   src/RS-232/rs232.c
 )
 

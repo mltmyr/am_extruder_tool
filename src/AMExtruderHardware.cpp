@@ -5,6 +5,7 @@
 #include <cmath>
 #include <thread>
 #include <atomic>
+#include <functional>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 
@@ -104,7 +105,7 @@ void AMExtruderHardware::parseData(const std_msgs::msg::ByteMultiArray::SharedPt
         {
             buf[i] = msg->data[i];
         }
-        this->mover_val_ = (float)&(buf[0]);
+        this->mover_val_ = *((float*)&(buf[0]));
     }
     else if ( len == 5 && cmd_byte == MSG_HEATING_DATA )
     {
@@ -113,7 +114,7 @@ void AMExtruderHardware::parseData(const std_msgs::msg::ByteMultiArray::SharedPt
         {
             buf[i] = msg->data[i];
         }
-        this->heater_val_ = (float)&(buf[0]);
+        this->heater_val_ = *((float*)&(buf[0]));
     }
 
     return;
@@ -133,7 +134,7 @@ AMExtruderHardware::AMExtruderHardware()
 AMExtruderHardware::~AMExtruderHardware()
 {
     delete reader_thread_ptr;
-    delete this->node_ptr;
+    this->node_ptr.reset();
 }
 
 hardware_interface::return_type AMExtruderHardware::configure(const hardware_interface::HardwareInfo & info)
@@ -312,8 +313,10 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
         return hardware_interface::return_type::ERROR;
     }
 
-    this->node_ptr = new Node("am_hw");
-    this->reader_thread_ptr = new std::thread(&rclcpp::spin, this->node_ptr);
+    this->node_ptr = rclcpp::Node::make_shared("am_hw");
+    this->node_spinner.add_node(this->node_ptr);
+    this->reader_thread_ptr = new std::thread([this]() {this->node_spinner.spin();});
+    //this->reader_thread_ptr = new std::thread(&rclcpp::executors::SingleThreadedExecutor::spin, this->node_spinner);
     this->reader_thread_ptr->detach();
 
     status_ = hardware_interface::status::CONFIGURED;
@@ -386,7 +389,7 @@ hardware_interface::return_type AMExtruderHardware::start()
 #ifndef SIMULATE_EXTRUDER
     this->extruder_command_publisher = this->node_ptr->create_publisher<std_msgs::msg::ByteMultiArray>("am_extruder_command", 10);
     this->extruder_data_subscriber = this->node_ptr->create_subscription<std_msgs::msg::ByteMultiArray>(
-        "am_extruder_data", 10, std::bind(&AMExtruderHardware::parseData, this, _1));
+        "am_extruder_data", 10, std::bind(&AMExtruderHardware::parseData, this, std::placeholders::_1));
 #endif
 
     this->status_ = hardware_interface::status::STARTED;
@@ -399,8 +402,8 @@ hardware_interface::return_type AMExtruderHardware::stop()
     RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "stop");
 
 #ifndef SIMULATE_EXTRUDER
-    delete this->extruder_command_publisher;
-    delete this->extruder_data_subscriber;
+    this->extruder_command_publisher.reset();
+    this->extruder_data_subscriber.reset();
 #endif
 
     this->is_running = false;
@@ -447,9 +450,9 @@ hardware_interface::return_type AMExtruderHardware::write()
     memcpy(&(buf[1]), (unsigned char*)&(extruder_set_value), sizeof(float));
 
     auto extrusion_msg = std_msgs::msg::ByteMultiArray();
-    for (int i = 0; i < sizeof(float); i++)
+    for (unsigned int i = 0; i < sizeof(float); i++)
     {
-        extrusion_msg.data.append(buf[i]);
+        extrusion_msg.data.emplace_back(buf[i]);
     }
     this->extruder_command_publisher->publish(extrusion_msg);
 #else
@@ -461,9 +464,9 @@ hardware_interface::return_type AMExtruderHardware::write()
     memcpy(&(buf[1]), (unsigned char*)&(this->hw_filament_heater_command_), sizeof(float));
 
     auto heating_msg = std_msgs::msg::ByteMultiArray();
-    for (int i = 0; i < sizeof(float); i++)
+    for (unsigned int i = 0; i < sizeof(float); i++)
     {
-        heating_msg.data.append(buf[i]);
+        heating_msg.data.emplace_back(buf[i]);
     }
     this->extruder_command_publisher->publish(heating_msg);
 #else
