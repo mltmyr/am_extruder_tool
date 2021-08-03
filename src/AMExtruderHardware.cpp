@@ -28,13 +28,11 @@ public:
 
         this->T = T;
         this->K = K;
-        //this->x = x0;
         this->x_prev = x0;
 
         a = (2*T - dt)/(2*T + dt);
         b =     (K*dt)/(2*T + dt);
 
-        //u = 0;
         u_prev = 0;
         
         t_end = std::chrono::steady_clock::now();
@@ -59,9 +57,9 @@ public:
         return this->x;
     }
     void actuate(double u)
-    {
-        this->u = u;
-        return;
+    = u;
+        return;{
+        this->u 
     }
 
 private:
@@ -75,7 +73,6 @@ private:
     std::chrono::duration<long int, std::ratio<1,1000000>> t_duration;
     std::chrono::time_point<std::chrono::steady_clock> t_now;
     std::chrono::time_point<std::chrono::steady_clock> t_end;
-
 };
 
 FirstOrderProcessSimulation temperature_sim(220.0, 13.0, 25.0, 5.0);
@@ -128,7 +125,6 @@ double calc_stepper_motor_steps_per_mm_filament(int mot_steps_per_rev, int micro
 AMExtruderHardware::AMExtruderHardware()
     : reader_thread_ptr(nullptr), is_running(false)
 {
-
 }
 
 AMExtruderHardware::~AMExtruderHardware()
@@ -193,11 +189,11 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
     this->hw_hobb_gear_diameter_mm_ = stod(this->info_.hardware_parameters["hobb_gear_diameter_mm"]);
     this->hw_filament_diameter_mm_  = stod(this->info_.hardware_parameters["filament_diameter_mm"]);
     
-    this->hw_filament_mover_state_   = 0.0; //std::numeric_limits<double>::quiet_NaN();
-    this->hw_filament_mover_command_ = 0.0; //std::numeric_limits<double>::quiet_NaN();
+    this->hw_filament_mover_state_   = 0.0;
+    this->hw_filament_mover_command_ = 0.0;
 
-    this->hw_filament_heater_state_   = 0.0; //std::numeric_limits<double>::quiet_NaN();
-    this->hw_filament_heater_command_ = 0.0; //std::numeric_limits<double>::quiet_NaN();
+    this->hw_filament_heater_state_   = 0.0;
+    this->hw_filament_heater_command_ = 0.0;
 
     this->hw_steps_per_mm_filament_ = calc_stepper_motor_steps_per_mm_filament(
         this->hw_stepper_motor_steps_per_revolution_, this->hw_micro_stepping_,
@@ -316,7 +312,6 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
     this->node_ptr = rclcpp::Node::make_shared("am_hw");
     this->node_spinner.add_node(this->node_ptr);
     this->reader_thread_ptr = new std::thread([this]() {this->node_spinner.spin();});
-    //this->reader_thread_ptr = new std::thread(&rclcpp::executors::SingleThreadedExecutor::spin, this->node_spinner);
     this->reader_thread_ptr->detach();
 
     status_ = hardware_interface::status::CONFIGURED;
@@ -345,8 +340,7 @@ std::vector<hardware_interface::StateInterface> AMExtruderHardware::export_state
         {
             RCLCPP_FATAL(
                 rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-                "Found unexpected joint with name '%s' when exporting state interface.",
-                joint_name.c_str());
+                "Found unexpected joint with name '%s' when exporting state interface.", joint_name.c_str());
         }
     }
 
@@ -375,8 +369,7 @@ std::vector<hardware_interface::CommandInterface> AMExtruderHardware::export_com
         {
             RCLCPP_FATAL(
                 rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-                "Found unexpected joint with name '%s' when exporting command interface.",
-                joint_name.c_str());
+                "Found unexpected joint with name '%s' when exporting command interface.", joint_name.c_str());
         }
     }
 
@@ -415,12 +408,9 @@ hardware_interface::return_type AMExtruderHardware::stop()
 
 hardware_interface::return_type AMExtruderHardware::read()
 {
-    //RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "read");
     this->hw_filament_mover_state_  = calcExtrusionSpeed(this->mover_val_);
     this->hw_filament_heater_state_ = this->heater_val_;
 
-    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "temp: %f", this->hw_filament_heater_state_);
-    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "exsp: %f", this->hw_filament_mover_state_);
     return hardware_interface::return_type::OK;
 }
 
@@ -459,10 +449,8 @@ hardware_interface::return_type AMExtruderHardware::write()
     filament_speed_sim.actuate(extruder_set_value);
 #endif
 
-#ifndef SIMULATE_EXTRUDER
-    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "heating command: %f", this->hw_filament_heater_command_);
-    
     float heater_command_float = (float)(this->hw_filament_heater_command_);
+#ifndef SIMULATE_EXTRUDER
     buf[0] = MSG_CMD_SET_HEATING;
     memcpy(&(buf[1]), (unsigned char*)&heater_command_float, sizeof(float));
 
@@ -473,7 +461,7 @@ hardware_interface::return_type AMExtruderHardware::write()
     }
     this->extruder_command_publisher->publish(heating_msg);
 #else
-    temperature_sim.actuate(this->hw_filament_heater_command_);
+    temperature_sim.actuate(heater_command_float);
 #endif
 
     return hardware_interface::return_type::OK;

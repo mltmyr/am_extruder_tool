@@ -8,8 +8,6 @@
 
 #include "RS-232/rs232.h"
 
-//using namespace std::chrono_literals;
-
 #define EXTRUDER_LOGGER_NAME "AMExtruderCom"
 
 class AMExtruderCom : public rclcpp::Node
@@ -22,7 +20,6 @@ private:
 	void readSerial();
 	void onCommand(const std_msgs::msg::ByteMultiArray::SharedPtr msg);
 	rclcpp::Publisher<std_msgs::msg::ByteMultiArray>::SharedPtr extruder_data_publisher;
-	//rclcpp::TimerBase::SharedPtr publish_timer;
 	std::thread* reader_thread;
 	std::atomic<bool> is_running;
 
@@ -37,7 +34,6 @@ AMExtruderCom::AMExtruderCom(int com_port_number, int baudrate)
 
 
 	this->extruder_data_publisher = this->create_publisher<std_msgs::msg::ByteMultiArray>("am_extruder_data", 10);
-	//this->publish_timer = this->create_wall_timer(100ms, std::bind(&AMExtruderCom::readSerial, this));
 	this->reader_thread = new std::thread(&AMExtruderCom::readSerial, this);
 	this->reader_thread->detach();
 
@@ -67,9 +63,10 @@ AMExtruderCom::AMExtruderCom(int com_port_number, int baudrate)
 AMExtruderCom::~AMExtruderCom()
 {
 	delete this->reader_thread;
+
 	unsigned char buf[1] = {'N'};
 	RS232_SendBuf(this->com_port_number, buf, 1);
-	//RS232_flushRXTX(this->com_port_number);
+
 	RS232_CloseComport(this->com_port_number);
 }
 
@@ -88,24 +85,21 @@ void AMExtruderCom::processByte()
         int cnt = RS232_PollComport(this->com_port_number, &(local_buffer[0]), 1);
         if (cnt > 0)
         {
-        	/*RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-				"Received %i bytes over serial: %c.", cnt, local_buffer[0]);*/
-        }
+        	switch (local_buffer[0])
+        	{
+        	case MSG_EXTRUSION_SPEED_DATA:
+            	numBytesTot  = 5;
+            	numBytesRcvd = 1;
+            	break;
 
-        switch (local_buffer[0])
-        {
-        case MSG_EXTRUSION_SPEED_DATA:
-            numBytesTot  = 5;
-            numBytesRcvd = 1;
-            break;
+        	case MSG_HEATING_DATA:
+            	numBytesTot  = 5;
+            	numBytesRcvd = 1;
+            	break;
 
-        case MSG_HEATING_DATA:
-            numBytesTot  = 5;
-            numBytesRcvd = 1;
-            break;
-
-        default:
-            break;
+        	default:
+            	break;
+        	}
         }
     }
 
@@ -119,10 +113,6 @@ void AMExtruderCom::processByte()
     /* Execute command when all bytes have been read */
     if (numBytesRcvd >= numBytesTot)
     {
-    	RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-			"Received data over serial: %i, %i, %i, %i, %i",
-			local_buffer[0], local_buffer[1], local_buffer[2], local_buffer[3], local_buffer[4]);
-
     	auto message = std_msgs::msg::ByteMultiArray();
     	for (int i = 0; i < LBUF_SIZE; i++)
     	{
@@ -141,9 +131,8 @@ void AMExtruderCom::processByte()
 
 void AMExtruderCom::readSerial()
 {
-	RCLCPP_INFO(
-		rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-		"Starting readSerial thread.");
+	RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "Starting readSerial thread.");
+	
 	while (true)
 	{
 		if (this->is_running)
@@ -174,10 +163,6 @@ void AMExtruderCom::onCommand(const std_msgs::msg::ByteMultiArray::SharedPtr msg
 	{
 		buf[i] = msg->data[i];
 	}
-
-	RCLCPP_INFO(rclcpp::get_logger(1+EXTRUDER_LOGGER_NAME),
-		"Sending command: %c [%i, %i, %i, %i]", buf[0], buf[1], buf[2], buf[3], buf[4]);
-
 	
 	if (RS232_SendBuf(this->com_port_number, buf, len) == -1)
 	{
