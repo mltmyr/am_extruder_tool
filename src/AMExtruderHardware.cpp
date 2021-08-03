@@ -101,18 +101,18 @@ void AMExtruderHardware::parseData(const std_msgs::msg::ByteMultiArray::SharedPt
     if ( len == 5 && cmd_byte == MSG_EXTRUSION_SPEED_DATA )
     {
         unsigned char buf[sizeof(float)];
-        for (int i = 0; i < 5; i++)
+        for (unsigned int i = 0; i < sizeof(float); i++)
         {
-            buf[i] = msg->data[i];
+            buf[i] = msg->data[i+1];
         }
         this->mover_val_ = *((float*)&(buf[0]));
     }
     else if ( len == 5 && cmd_byte == MSG_HEATING_DATA )
     {
         unsigned char buf[sizeof(float)];
-        for (int i = 0; i < 5; i++)
+        for (unsigned int i = 0; i < sizeof(float); i++)
         {
-            buf[i] = msg->data[i];
+            buf[i] = msg->data[i+1];
         }
         this->heater_val_ = *((float*)&(buf[0]));
     }
@@ -415,11 +415,12 @@ hardware_interface::return_type AMExtruderHardware::stop()
 
 hardware_interface::return_type AMExtruderHardware::read()
 {
-    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "read");
+    //RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "read");
     this->hw_filament_mover_state_  = calcExtrusionSpeed(this->mover_val_);
     this->hw_filament_heater_state_ = this->heater_val_;
 
     RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "temp: %f", this->hw_filament_heater_state_);
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "exsp: %f", this->hw_filament_mover_state_);
     return hardware_interface::return_type::OK;
 }
 
@@ -441,16 +442,15 @@ double AMExtruderHardware::calcExtrusionSpeed(float stepper_frequency)
 
 hardware_interface::return_type AMExtruderHardware::write()
 {
-    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "write");
-    unsigned char buf[1+sizeof(float)];
+    unsigned char buf[1+sizeof(float)] = {0};
 
     float extruder_set_value = this->calcStepperFrequency(this->hw_filament_mover_command_);
 #ifndef SIMULATE_EXTRUDER
     buf[0] = MSG_CMD_SET_EXTRUSION_SPEED;
-    memcpy(&(buf[1]), (unsigned char*)&(extruder_set_value), sizeof(float));
+    memcpy(&(buf[1]), (unsigned char*)&extruder_set_value, sizeof(float));
 
     auto extrusion_msg = std_msgs::msg::ByteMultiArray();
-    for (unsigned int i = 0; i < sizeof(float); i++)
+    for (unsigned int i = 0; i < 1+sizeof(float); i++)
     {
         extrusion_msg.data.emplace_back(buf[i]);
     }
@@ -460,11 +460,14 @@ hardware_interface::return_type AMExtruderHardware::write()
 #endif
 
 #ifndef SIMULATE_EXTRUDER
+    RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "heating command: %f", this->hw_filament_heater_command_);
+    
+    float heater_command_float = (float)(this->hw_filament_heater_command_);
     buf[0] = MSG_CMD_SET_HEATING;
-    memcpy(&(buf[1]), (unsigned char*)&(this->hw_filament_heater_command_), sizeof(float));
+    memcpy(&(buf[1]), (unsigned char*)&heater_command_float, sizeof(float));
 
     auto heating_msg = std_msgs::msg::ByteMultiArray();
-    for (unsigned int i = 0; i < sizeof(float); i++)
+    for (unsigned int i = 0; i < 1+sizeof(float); i++)
     {
         heating_msg.data.emplace_back(buf[i]);
     }

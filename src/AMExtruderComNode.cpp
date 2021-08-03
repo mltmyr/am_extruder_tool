@@ -49,19 +49,27 @@ AMExtruderCom::AMExtruderCom(int com_port_number, int baudrate)
 	int err = RS232_OpenComport(this->com_port_number, this->baudrate, mode, 0);
 	if (err != 0)
 	{
-		RCLCPP_ERROR(
-            rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            "Could not open COM port '%i'!",
-            this->com_port_number);
+		RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+        	"Could not open COM port '%i'!", this->com_port_number);
 	}
 
 	this->is_running = true;
+	
+	unsigned char buf[1] = {'Y'};
+	if (RS232_SendBuf(this->com_port_number, &(buf[0]), 1) == -1)
+	{
+		RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+        	"Failed activation of reading sensor data!");
+	}
+
 }
 
 AMExtruderCom::~AMExtruderCom()
 {
 	delete this->reader_thread;
-	RS232_flushRXTX(this->com_port_number);
+	unsigned char buf[1] = {'N'};
+	RS232_SendBuf(this->com_port_number, buf, 1);
+	//RS232_flushRXTX(this->com_port_number);
 	RS232_CloseComport(this->com_port_number);
 }
 
@@ -77,7 +85,13 @@ void AMExtruderCom::processByte()
 
     if (numBytesRcvd < 1)
     {
-        RS232_PollComport(this->com_port_number, &(local_buffer[0]), 1);
+        int cnt = RS232_PollComport(this->com_port_number, &(local_buffer[0]), 1);
+        if (cnt > 0)
+        {
+        	/*RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+				"Received %i bytes over serial: %c.", cnt, local_buffer[0]);*/
+        }
+
         switch (local_buffer[0])
         {
         case MSG_EXTRUSION_SPEED_DATA:
@@ -105,11 +119,17 @@ void AMExtruderCom::processByte()
     /* Execute command when all bytes have been read */
     if (numBytesRcvd >= numBytesTot)
     {
+    	RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+			"Received data over serial: %i, %i, %i, %i, %i",
+			local_buffer[0], local_buffer[1], local_buffer[2], local_buffer[3], local_buffer[4]);
+
     	auto message = std_msgs::msg::ByteMultiArray();
     	for (int i = 0; i < LBUF_SIZE; i++)
     	{
     		message.data.emplace_back(local_buffer[i]);
+    		local_buffer[i] = 0;
     	}
+
         this->extruder_data_publisher->publish(message);
 
         numBytesTot  = 1;
@@ -121,6 +141,9 @@ void AMExtruderCom::processByte()
 
 void AMExtruderCom::readSerial()
 {
+	RCLCPP_INFO(
+		rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+		"Starting readSerial thread.");
 	while (true)
 	{
 		if (this->is_running)
@@ -147,30 +170,31 @@ void AMExtruderCom::onCommand(const std_msgs::msg::ByteMultiArray::SharedPtr msg
 	}
 
 	unsigned char buf[1+sizeof(float)];
-	for (int i = 0; i < len; i++)
+	for (unsigned int i = 0; i < 1+sizeof(float); i++)
 	{
 		buf[i] = msg->data[i];
 	}
 
-	if (RS232_SendBuf(this->com_port_number, buf, len))
+	RCLCPP_INFO(rclcpp::get_logger(1+EXTRUDER_LOGGER_NAME),
+		"Sending command: %c [%i, %i, %i, %i]", buf[0], buf[1], buf[2], buf[3], buf[4]);
+
+	
+	if (RS232_SendBuf(this->com_port_number, buf, len) == -1)
 	{
 		char msg_type = buf[0];
 		if ((msg_type == MSG_CMD_SET_HEATING) || (msg_type == MSG_CMD_SET_EXTRUSION_SPEED))
 		{
 			float* data = (float*)&(msg->data[1]);
-			RCLCPP_ERROR(
-            	rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            	"Error transmitting '%s%f' on COM port %s!",
-            	msg_type, *data, this->com_port_number);
+			RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+            	"Error transmitting '%c%f' on COM port %i!", msg_type, *data, this->com_port_number);
 		}
 		else
 		{
-			RCLCPP_ERROR(
-            	rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            	"Error transmitting '%s' on COM port %s!",
-            	msg_type, this->com_port_number);
+			RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+            	"Error transmitting '%c' on COM port %i!", msg_type, this->com_port_number);
 		}
 	}
+
 	return;
 }
 
