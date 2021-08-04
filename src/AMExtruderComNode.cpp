@@ -50,22 +50,11 @@ AMExtruderCom::AMExtruderCom(int com_port_number, int baudrate)
 	}
 
 	this->is_running = true;
-	
-	unsigned char buf[1] = {'Y'};
-	if (RS232_SendBuf(this->com_port_number, &(buf[0]), 1) == -1)
-	{
-		RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-        	"Failed activation of reading sensor data!");
-	}
-
 }
 
 AMExtruderCom::~AMExtruderCom()
 {
 	delete this->reader_thread;
-
-	unsigned char buf[1] = {'N'};
-	RS232_SendBuf(this->com_port_number, buf, 1);
 
 	RS232_CloseComport(this->com_port_number);
 }
