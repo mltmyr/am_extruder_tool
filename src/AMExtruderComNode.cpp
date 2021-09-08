@@ -175,7 +175,7 @@ void AMExtruderCom::onCommand(const std_msgs::msg::ByteMultiArray::SharedPtr msg
 int main(int argc, char* argv[])
 {
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<AMExtruderCom>(24, 9600));
+	rclcpp::spin(std::make_shared<AMExtruderCom>(5, 9600)); //24
 	rclcpp::shutdown();
 	return 0;
 }
