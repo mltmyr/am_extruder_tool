@@ -11,7 +11,7 @@
                 <param name="stepper_motor_steps_per_revolution">400</param>
                 <param name="micro_stepping">16</param>
                 <param name="gear_ratio">3.0</param>
-                <param name="hobb_gear_diameter_mm">7.3</param>
+                <param name="hobb_gear_diameter_mm">7.68</param>
                 <param name="filament_diameter_mm">2.85</param>
             </hardware>
             <joint name="filament_mover">
