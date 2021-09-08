@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- Example of usage -->
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="am_extruder_tool_example">
+
+	<xacro:arg name="serial_port" default="ttyACM0" />
+	<xacro:arg name="baud_rate" default="9600" />
+
+	<xacro:include filename="$(find am_extruder_tool)/description/am_extruder_tool.urdf.xacro" />
+
+	<xacro:include filename="$(find am_extruder_tool)/description/am_extruder_tool_actuator.ros2_control.xacro" />
+
+	<link name="world"/>
+
+	<xacro:am_extruder_tool parent="world" prefix="example">
+		<!--<origin xyz="0 0 0" rpy="0 0 0" />-->
+	</xacro:am_extruder_tool>
+
+	<xacro:am_extruder_tool_actuator name="example_extruder" serialport="$(arg serial_port)" baudrate="$(arg baud_rate)"/>
+
+</robot>

@@ -1,0 +1,27 @@
+controller_manager:
+    ros__parameters:
+        update_rate: 2 # Hz
+
+        joint_state_controller:
+            type: joint_state_controller/JointStateController
+            publish_rate: 2
+
+        filament_heater_controller:
+            type: position_controllers/JointGroupPositionController
+            #joint: filament_heater
+
+        filament_mover_controller:
+            type: velocity_controllers/JointGroupVelocityController
+            #joint: filament_mover
+
+filament_heater_controller:
+    ros__parameters:
+        joints:
+            - filament_heater
+        interface_name: position
+
+filament_mover_controller:
+    ros__parameters:
+        joints:
+            - filament_mover
+        interface_name: velocity
