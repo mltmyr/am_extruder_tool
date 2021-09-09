@@ -120,49 +120,6 @@ hardware_interface::return_type AMExtruderHardware::configure(const hardware_int
         return hardware_interface::return_type::ERROR;
     }
 
-    this->hw_com_port_name_ = this->info_.hardware_parameters["com_port_name"];
-#ifndef SIMULATE_EXTRUDER
-    this->hw_com_port_number_ = RS232_GetPortnr(this->hw_com_port_name_.c_str());
-
-    if (this->hw_com_port_number_ == -1)
-    {
-        RCLCPP_WARN(
-            rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            "Could not find COM port number for COM port with name %s.",
-            this->hw_com_port_name_.c_str());
-    }
-    else
-    {
-        RCLCPP_INFO(
-            rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            "Using COM port '%s' (COM number: %d).",
-            this->hw_com_port_name_.c_str(), this->hw_com_port_number_);
-    }
-#endif
-
-    this->hw_baud_rate_ = stoi(this->info_.hardware_parameters["com_port_baud_rate"]);
-    switch (this->hw_baud_rate_)
-    {
-        case 9600:
-        case 19200:
-        case 38400:
-        case 57600:
-        case 115200:
-            RCLCPP_INFO(
-                rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-                "Using baudrate %d on serial connection.",
-                this->hw_baud_rate_);
-            break;
-
-        default:
-            RCLCPP_WARN(
-                rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-                "Non-supported baudrate (%d) set! Changed to default value 9600.",
-                this->hw_baud_rate_);
-            this->hw_baud_rate_ = 9600;
-            break;
-    }
-
     this->hw_stepper_motor_steps_per_revolution_ = stoi(this->info_.hardware_parameters["stepper_motor_steps_per_revolution"]);
     this->hw_micro_stepping_        = stoi(this->info_.hardware_parameters["micro_stepping"]);
     this->hw_gear_ratio_            = stod(this->info_.hardware_parameters["gear_ratio"]);

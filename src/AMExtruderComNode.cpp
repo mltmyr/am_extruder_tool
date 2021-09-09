@@ -1,6 +1,7 @@
 #include <functional>
 #include <thread>
 #include <atomic>
+#include <string>
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -15,7 +16,7 @@
 class AMExtruderCom : public rclcpp::Node
 {
 public:
-	AMExtruderCom(int com_port_number, int baudrate);
+	AMExtruderCom(std::string com_port_name, int baudrate);
 	~AMExtruderCom();
 private:
 	void processByte();
@@ -27,13 +28,17 @@ private:
 	std::atomic<bool> is_running;
 
 	rclcpp::Subscription<am_extruder_msg::msg::ExtruderCommand>::SharedPtr extruder_command_subscriber;
+	std::string com_port_name;
 	int com_port_number;
 	int baudrate;
 };
 
-AMExtruderCom::AMExtruderCom(int com_port_number, int baudrate)
-	: Node("am_hw_com"), is_running(false), com_port_number(com_port_number), baudrate(baudrate)
+AMExtruderCom::AMExtruderCom(std::string com_port_name, int baudrate)
+	: Node("am_hw_com"), is_running(false)
 {
+	this->declare_parameter<std::string>("serial_port", com_port_name);
+	this->declare_parameter<std::string>("baud_rate", std::to_string(baudrate));
+
 	this->extruder_heater_state_publisher = this->create_publisher<am_extruder_msg::msg::ExtruderTemperatureState>(
 		"am_extruder_temperature_state", 5);
 	this->extruder_mover_state_publisher = this->create_publisher<am_extruder_msg::msg::ExtruderSteppingState>(
@@ -46,12 +51,45 @@ AMExtruderCom::AMExtruderCom(int com_port_number, int baudrate)
 		"am_extruder_command", 10, std::bind(&AMExtruderCom::onCommandMsg, this, std::placeholders::_1)
 	);
 
+	std::string baudrate_str;
+	this->get_parameter("baud_rate", baudrate_str);
+	this->baudrate = std::stoi(baudrate_str);
+	switch (this->baudrate)
+    {
+    case 9600:
+    case 19200:
+    case 38400:
+    case 57600:
+    case 115200:
+        break;
+
+    default:
+        RCLCPP_WARN(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+        	"Non-supported baudrate (%d) set! Changed to default value 9600.", this->baudrate);
+        this->baudrate = 9600;
+        break;
+    }
+
+	this->get_parameter("serial_port", this->com_port_name);
+	this->com_port_number = RS232_GetPortnr(this->com_port_name.c_str());
+	if (this->com_port_number == -1)
+	{
+		RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+			"Cannot find comport number based on device name '%s'", this->com_port_name);
+	}
+	
 	char mode[] = {'8', 'N', '1'};
 	int err = RS232_OpenComport(this->com_port_number, this->baudrate, mode, 0);
 	if (err != 0)
 	{
 		RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
         	"Could not open COM port '%i'!", this->com_port_number);
+	}
+	else
+	{
+		RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+			"Using COM port '%s' (COM number: %i) with baudrate %i.",
+			this->com_port_name.c_str(), this->com_port_number, this->baudrate);
 	}
 
 	this->is_running = true;
@@ -194,7 +232,7 @@ void AMExtruderCom::onCommandMsg(const am_extruder_msg::msg::ExtruderCommand::Sh
 int main(int argc, char* argv[])
 {
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<AMExtruderCom>(5, 9600)); //24
+	rclcpp::spin(std::make_shared<AMExtruderCom>("ttyS10", 10000));
 	rclcpp::shutdown();
 	return 0;
 }

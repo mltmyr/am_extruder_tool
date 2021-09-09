@@ -32,6 +32,7 @@ def generate_launch_description():
 		package='am_extruder_tool',
 		executable='am_extruder_com',
 		output='both',
+		parameters=[description_file_params],
 	)
 
 	extruder_state_publisher_node = Node(
