@@ -85,35 +85,15 @@ bool read_temp = true;
 #define MSG_EXTRUSION_SPEED_DATA 'E'
 #define MSG_HEATING_DATA         'T'
 
-void AMExtruderHardware::parseData(const std_msgs::msg::ByteMultiArray::SharedPtr msg)
+void AMExtruderHardware::onTemperatureStateMsg(const am_extruder_msg::msg::ExtruderTemperatureState::SharedPtr msg)
 {
-    int len = msg->data.size();
-    if (len <= 0)
-    {
-        return;
-    }
+    this->heater_val_ = (float)(msg->temperature);
+    return;
+}
 
-    unsigned char cmd_byte = msg->data[0];
-
-    if ( len == 5 && cmd_byte == MSG_EXTRUSION_SPEED_DATA )
-    {
-        unsigned char buf[sizeof(float)];
-        for (unsigned int i = 0; i < sizeof(float); i++)
-        {
-            buf[i] = msg->data[i+1];
-        }
-        this->mover_val_ = *((float*)&(buf[0]));
-    }
-    else if ( len == 5 && cmd_byte == MSG_HEATING_DATA )
-    {
-        unsigned char buf[sizeof(float)];
-        for (unsigned int i = 0; i < sizeof(float); i++)
-        {
-            buf[i] = msg->data[i+1];
-        }
-        this->heater_val_ = *((float*)&(buf[0]));
-    }
-
+void AMExtruderHardware::onSteppingStateMsg(const am_extruder_msg::msg::ExtruderSteppingState::SharedPtr msg)
+{
+    this->mover_val_ = (float)(msg->stepping_frequency);
     return;
 }
 
@@ -380,9 +360,12 @@ hardware_interface::return_type AMExtruderHardware::start()
 {
     RCLCPP_INFO(rclcpp::get_logger(EXTRUDER_LOGGER_NAME), "start");
 #ifndef SIMULATE_EXTRUDER
-    this->extruder_command_publisher = this->node_ptr->create_publisher<std_msgs::msg::ByteMultiArray>("am_extruder_command", 10);
-    this->extruder_data_subscriber = this->node_ptr->create_subscription<std_msgs::msg::ByteMultiArray>(
-        "am_extruder_data", 10, std::bind(&AMExtruderHardware::parseData, this, std::placeholders::_1));
+    this->extruder_command_publisher = this->node_ptr->create_publisher<am_extruder_msg::msg::ExtruderCommand>("am_extruder_command", 10);
+
+    this->extruder_heater_state_subscriber = this->node_ptr->create_subscription<am_extruder_msg::msg::ExtruderTemperatureState>(
+        "am_extruder_temperature_state", 5, std::bind(&AMExtruderHardware::onTemperatureStateMsg, this, std::placeholders::_1));
+    this->extruder_mover_state_subscriber = this->node_ptr->create_subscription<am_extruder_msg::msg::ExtruderSteppingState>(
+        "am_extruder_stepping_state", 5, std::bind(&AMExtruderHardware::onSteppingStateMsg, this, std::placeholders::_1));
 #endif
 
     this->status_ = hardware_interface::status::STARTED;
@@ -396,7 +379,8 @@ hardware_interface::return_type AMExtruderHardware::stop()
 
 #ifndef SIMULATE_EXTRUDER
     this->extruder_command_publisher.reset();
-    this->extruder_data_subscriber.reset();
+    this->extruder_heater_state_subscriber.reset();
+    this->extruder_mover_state_subscriber.reset();
 #endif
 
     this->is_running = false;
@@ -432,36 +416,17 @@ double AMExtruderHardware::calcExtrusionSpeed(float stepper_frequency)
 
 hardware_interface::return_type AMExtruderHardware::write()
 {
-    unsigned char buf[1+sizeof(float)] = {0};
+    float extruder_temperature_target = (float)(this->hw_filament_heater_command_);
+    float extruder_stepping_frequency_target = this->calcStepperFrequency(this->hw_filament_mover_command_);
 
-    float extruder_set_value = this->calcStepperFrequency(this->hw_filament_mover_command_);
 #ifndef SIMULATE_EXTRUDER
-    buf[0] = MSG_CMD_SET_EXTRUSION_SPEED;
-    memcpy(&(buf[1]), (unsigned char*)&extruder_set_value, sizeof(float));
-
-    auto extrusion_msg = std_msgs::msg::ByteMultiArray();
-    for (unsigned int i = 0; i < 1+sizeof(float); i++)
-    {
-        extrusion_msg.data.emplace_back(buf[i]);
-    }
-    this->extruder_command_publisher->publish(extrusion_msg);
+    auto extruder_command_msg = am_extruder_msg::msg::ExtruderCommand();
+    extruder_command_msg.temperature_target = extruder_temperature_target;
+    extruder_command_msg.stepping_frequency_target = extruder_stepping_frequency_target;
+    this->extruder_command_publisher->publish(extruder_command_msg);
 #else
-    filament_speed_sim.actuate(extruder_set_value);
-#endif
-
-    float heater_command_float = (float)(this->hw_filament_heater_command_);
-#ifndef SIMULATE_EXTRUDER
-    buf[0] = MSG_CMD_SET_HEATING;
-    memcpy(&(buf[1]), (unsigned char*)&heater_command_float, sizeof(float));
-
-    auto heating_msg = std_msgs::msg::ByteMultiArray();
-    for (unsigned int i = 0; i < 1+sizeof(float); i++)
-    {
-        heating_msg.data.emplace_back(buf[i]);
-    }
-    this->extruder_command_publisher->publish(heating_msg);
-#else
-    temperature_sim.actuate(heater_command_float);
+    temperature_sim.actuate(extruder_temperature_target);
+    filament_speed_sim.actuate(extruder_stepping_frequency_target);
 #endif
 
     return hardware_interface::return_type::OK;

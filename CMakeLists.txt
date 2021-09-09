@@ -20,7 +20,7 @@ find_package(ament_cmake REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
+find_package(am_extruder_msg REQUIRED)
 
 # compile serial communication helper node
 add_executable(am_extruder_com
@@ -35,7 +35,7 @@ target_include_directories(am_extruder_com
 
 ament_target_dependencies(am_extruder_com
   rclcpp
-  std_msgs
+  am_extruder_msg
 )
 
 # compile project
@@ -53,7 +53,7 @@ ament_target_dependencies(${PROJECT_NAME}
   hardware_interface
   pluginlib
   rclcpp
-  std_msgs
+  am_extruder_msg
 )
 
 pluginlib_export_plugin_description_file(hardware_interface am_extruder_tool_hardware.xml)

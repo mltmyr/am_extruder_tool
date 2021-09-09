@@ -1,10 +1,12 @@
 #include <functional>
-//#include <chrono>
 #include <thread>
 #include <atomic>
 
 #include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/byte_multi_array.hpp"
+
+#include "am_extruder_msg/msg/extruder_command.hpp"
+#include "am_extruder_msg/msg/extruder_stepping_state.hpp"
+#include "am_extruder_msg/msg/extruder_temperature_state.hpp"
 
 #include "RS-232/rs232.h"
 
@@ -18,12 +20,13 @@ public:
 private:
 	void processByte();
 	void readSerial();
-	void onCommand(const std_msgs::msg::ByteMultiArray::SharedPtr msg);
-	rclcpp::Publisher<std_msgs::msg::ByteMultiArray>::SharedPtr extruder_data_publisher;
+	void onCommandMsg(const am_extruder_msg::msg::ExtruderCommand::SharedPtr msg);
+	rclcpp::Publisher<am_extruder_msg::msg::ExtruderTemperatureState>::SharedPtr extruder_heater_state_publisher;
+	rclcpp::Publisher<am_extruder_msg::msg::ExtruderSteppingState>::SharedPtr extruder_mover_state_publisher;
 	std::thread* reader_thread;
 	std::atomic<bool> is_running;
 
-	rclcpp::Subscription<std_msgs::msg::ByteMultiArray>::SharedPtr extruder_command_subscriber;
+	rclcpp::Subscription<am_extruder_msg::msg::ExtruderCommand>::SharedPtr extruder_command_subscriber;
 	int com_port_number;
 	int baudrate;
 };
@@ -31,14 +34,16 @@ private:
 AMExtruderCom::AMExtruderCom(int com_port_number, int baudrate)
 	: Node("am_hw_com"), is_running(false), com_port_number(com_port_number), baudrate(baudrate)
 {
+	this->extruder_heater_state_publisher = this->create_publisher<am_extruder_msg::msg::ExtruderTemperatureState>(
+		"am_extruder_temperature_state", 5);
+	this->extruder_mover_state_publisher = this->create_publisher<am_extruder_msg::msg::ExtruderSteppingState>(
+		"am_extruder_stepping_state", 5);
 
-
-	this->extruder_data_publisher = this->create_publisher<std_msgs::msg::ByteMultiArray>("am_extruder_data", 10);
 	this->reader_thread = new std::thread(&AMExtruderCom::readSerial, this);
 	this->reader_thread->detach();
 
-	this->extruder_command_subscriber = this->create_subscription<std_msgs::msg::ByteMultiArray>(
-		"am_extruder_command", 10, std::bind(&AMExtruderCom::onCommand, this, std::placeholders::_1)
+	this->extruder_command_subscriber = this->create_subscription<am_extruder_msg::msg::ExtruderCommand>(
+		"am_extruder_command", 10, std::bind(&AMExtruderCom::onCommandMsg, this, std::placeholders::_1)
 	);
 
 	char mode[] = {'8', 'N', '1'};
@@ -102,14 +107,32 @@ void AMExtruderCom::processByte()
     /* Execute command when all bytes have been read */
     if (numBytesRcvd >= numBytesTot)
     {
-    	auto message = std_msgs::msg::ByteMultiArray();
-    	for (int i = 0; i < LBUF_SIZE; i++)
+    	unsigned char msg_type = local_buffer[0];
+    	switch (msg_type)
     	{
-    		message.data.emplace_back(local_buffer[i]);
-    		local_buffer[i] = 0;
-    	}
+    		case MSG_HEATING_DATA:
+    		{
+    			auto temperature_state_msg = am_extruder_msg::msg::ExtruderTemperatureState();
 
-        this->extruder_data_publisher->publish(message);
+    			float* temp_data_ptr = (float*)&local_buffer[1];
+    			temperature_state_msg.temperature = *temp_data_ptr;
+
+    			this->extruder_heater_state_publisher->publish(temperature_state_msg);
+   				break;
+   			}
+   			case MSG_EXTRUSION_SPEED_DATA:
+   			{
+   				auto stepping_state_msg = am_extruder_msg::msg::ExtruderSteppingState();
+
+   				float* step_data_ptr = (float*)&local_buffer[1];
+   				stepping_state_msg.stepping_frequency = *step_data_ptr;
+
+   				this->extruder_mover_state_publisher->publish(stepping_state_msg);
+   				break;
+   			}
+   			default:
+   				break;
+    	}
 
         numBytesTot  = 1;
         numBytesRcvd = 0;
@@ -138,35 +161,31 @@ void AMExtruderCom::readSerial()
 
 #define MSG_CMD_SET_HEATING         'H'
 #define MSG_CMD_SET_EXTRUSION_SPEED 'X'
+#define RS232_SEND_ERROR -1
 
-void AMExtruderCom::onCommand(const std_msgs::msg::ByteMultiArray::SharedPtr msg)
+void AMExtruderCom::onCommandMsg(const am_extruder_msg::msg::ExtruderCommand::SharedPtr msg)
 {
-	int len = msg->data.size();
-	if (len <= 0)
+	float temperature_target        = msg->temperature_target;
+	float stepping_frequency_target = msg->stepping_frequency_target;
+
+	unsigned char buf_temp[1+sizeof(float)] = {0};
+	buf_temp[0] = MSG_CMD_SET_HEATING;
+	memcpy(&(buf_temp[1]), (unsigned char*)&temperature_target, sizeof(float));
+
+	if (RS232_SendBuf(this->com_port_number, buf_temp, 1+sizeof(float)) == RS232_SEND_ERROR)
 	{
-		return;
+		RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+           	"Error transmitting '%c%f' on COM port %i!", MSG_CMD_SET_HEATING, temperature_target, this->com_port_number);
 	}
 
-	unsigned char buf[1+sizeof(float)];
-	for (unsigned int i = 0; i < 1+sizeof(float); i++)
+	unsigned char buf_step[1+sizeof(float)] = {0};
+	buf_step[0] = MSG_CMD_SET_EXTRUSION_SPEED;
+	memcpy(&(buf_step[1]), (unsigned char*)&stepping_frequency_target, sizeof(float));
+
+	if (RS232_SendBuf(this->com_port_number, buf_step, 1+sizeof(float)) == RS232_SEND_ERROR)
 	{
-		buf[i] = msg->data[i];
-	}
-	
-	if (RS232_SendBuf(this->com_port_number, buf, len) == -1)
-	{
-		char msg_type = buf[0];
-		if ((msg_type == MSG_CMD_SET_HEATING) || (msg_type == MSG_CMD_SET_EXTRUSION_SPEED))
-		{
-			float* data = (float*)&(msg->data[1]);
-			RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            	"Error transmitting '%c%f' on COM port %i!", msg_type, *data, this->com_port_number);
-		}
-		else
-		{
-			RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
-            	"Error transmitting '%c' on COM port %i!", msg_type, this->com_port_number);
-		}
+		RCLCPP_ERROR(rclcpp::get_logger(EXTRUDER_LOGGER_NAME),
+        	"Error transmitting '%c%f' on COM port %i!", MSG_CMD_SET_EXTRUSION_SPEED, stepping_frequency_target, this->com_port_number);
 	}
 
 	return;
