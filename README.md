@@ -4,6 +4,9 @@
 `cd [your_ros2_workspace]/src`
 
 `git clone git@github.com:mltmyr/am_extruder_tool.git`
+`git clone git@github.com:mltmyr/am_extruder_msg.git`
+
+```
 (`git clone git@github.com:mltmyr/am_extruder_simple_ui.git`)
 
 ### Dependencies
